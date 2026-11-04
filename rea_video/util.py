@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 LOG = logging.getLogger("rea_video")
+OCR_LANGS = ("zh", "ja")  # subtitle/huazi OCR languages; zh is the bundled recognizer, others are in overlay._REC_MODELS
 
 
 def setup_logging(verbose: bool = False) -> None:

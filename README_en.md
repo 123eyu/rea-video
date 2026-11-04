@@ -7,7 +7,7 @@ Reverse-engineer any video.
 Talking-head, tabletop, AI video, 3D, motion graphics, mixed edits: give it any of them,<br>
 and it tells you shot by shot how the visuals, styled text, editing and audio were made, then gives you a plan to make one yourself.
 
-[中文](README.md) | English
+[中文](README.md) | English | [日本語](README_ja.md)
 
 [![Stars](https://img.shields.io/github/stars/JuneYaooo/rea-video?style=flat)](https://github.com/JuneYaooo/rea-video/stargazers)
 ![Python](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
@@ -93,6 +93,36 @@ Correctly flags the song as AI-generated (it was made with Suno). The vision mod
 </tr>
 </table>
 
+## Remakes
+
+After rea-video breaks a video down, the remake recipe in [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) generates a new version: camera, motion, pacing and transitions follow the original, only the elements you choose are swapped.
+These results were generated with a self-hosted MiniMax H3: the original shot is the motion reference, and keyframes with the swapped elements (gpt-image-2) set the look.
+Below are three remakes that OiiOii showed in its WeChat articles. For each we made two versions: the same swap as OiiOii, and one that also swaps the subject, setting and props.
+Each GIF plays four versions in sync: original, OiiOii remake, our remake, element-swap version.
+
+<table>
+<tr><td>
+<b>Overhead outfit change</b> · 12 s<br>
+Same swap: woman → man, three outfits → matching menswear. Element swap: a girl in three historical Hanfu outfits in a Chinese study; the remote becomes a round fan.<br>
+<img src="docs/cases/remake/outfit.gif"><br>
+<a href="docs/cases/remake/outfit_compare.mp4">HD comparison video (with audio)</a> · <a href="docs/cases/remake/outfit_sheet.jpg">same-moment stills</a>
+</td></tr>
+<tr><td>
+<b>Paper-craft / watercolor animation</b> · 30 s<br>
+Same swap: new clay girl as the lead. Element swap: a fox; forest → coral reef, clouds → starry sky, sunset → aurora.<br>
+<img src="docs/cases/remake/paper.gif"><br>
+<a href="docs/cases/remake/paper_compare.mp4">HD comparison video (with audio)</a> · <a href="docs/cases/remake/paper_sheet.jpg">same-moment stills</a>
+</td></tr>
+<tr><td>
+<b>Handheld product video</b> · 21 s · 11 shots<br>
+Same swap: an original new product, English sticker → Chinese caption. Element swap: pink product, kitchen → camping table, new ingredients.<br>
+<img src="docs/cases/remake/juicer.gif"><br>
+<a href="docs/cases/remake/juicer_compare.mp4">HD comparison video (with audio)</a> · <a href="docs/cases/remake/juicer_sheet.jpg">same-moment stills</a>
+</td></tr>
+</table>
+
+The HD comparison videos use the original audio. The originals and OiiOii versions come from the articles and are shown for comparison only.
+
 ## Accuracy
 
 How-it-was-made accuracy, weighted by shot duration:
@@ -107,7 +137,7 @@ On original files the tools alone are mostly enough. Videos downloaded from plat
 
 ## How it works
 
-![rea-video pipeline](docs/rea-flow.svg)
+![rea-video pipeline](docs/rea-flow_en.svg)
 
 1. Split: cut the video into shots and separate audio into voice, music and effects.
 2. Gather evidence: measure the frames (frame cadence, sensor noise, whether the whole image is panning as one plane, AIGC tags in metadata); look at the images (hands, text, physics); listen (BPM, key, singing vs speech).

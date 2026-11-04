@@ -7,7 +7,7 @@
 实拍口播、桌拍、AI 视频、3D、代码动效、混剪都能拆，<br>
 逐个镜头告诉你画面、花字、剪辑和声音是怎么做的，再告诉你怎么照着做一条。
 
-中文 | [English](README_en.md)
+中文 | [English](README_en.md) | [日本語](README_ja.md)
 
 [![Stars](https://img.shields.io/github/stars/JuneYaooo/rea-video?style=flat)](https://github.com/JuneYaooo/rea-video/stargazers)
 ![Python](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
@@ -91,6 +91,36 @@ AI 人物对话 + 代码界面 + 8 秒真实录屏。5 个对话镜头被界面�
 </tr>
 </table>
 
+## 复刻效果
+
+rea-video 拆完，交给 [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) 的复刻配方生成：运镜、动作、节奏、转场跟着原片走，只换你指定的元素。
+目前的效果是用自己部署的 MiniMax H3 生成的：原镜头当动作参考，换好元素的关键帧（gpt-image-2）定长相和场景。
+下面是公众号文章里 OiiOii 做过的三组复刻，每组我们做了两版：和 OiiOii 同样的换法，以及把主体、场景、道具一起换掉。
+每个动图里四格同步播放：原片、OiiOii 复刻、我们的复刻、换元素版。
+
+<table>
+<tr><td>
+<b>俯拍换装</b> · 12 秒<br>
+同款：女生换成男生，三套衣服换成对应男装。换元素：古风少女、三套汉服、中式书房，遥控器换成团扇。<br>
+<img src="docs/cases/remake/outfit.gif"><br>
+<a href="docs/cases/remake/outfit_compare.mp4">高清对比视频（带声音）</a> · <a href="docs/cases/remake/outfit_sheet.jpg">同一时刻抽帧</a>
+</td></tr>
+<tr><td>
+<b>纸艺 / 水彩动画</b> · 30 秒<br>
+同款：主角换成黏土小女孩。换元素：主角换成小狐狸，森林换成海底，云端换成星空，晚霞换成极光。<br>
+<img src="docs/cases/remake/paper.gif"><br>
+<a href="docs/cases/remake/paper_compare.mp4">高清对比视频（带声音）</a> · <a href="docs/cases/remake/paper_sheet.jpg">同一时刻抽帧</a>
+</td></tr>
+<tr><td>
+<b>实拍带货</b> · 21 秒 · 11 镜<br>
+同款：产品换成原创新款，英文贴字换成中文。换元素：樱花粉产品，厨房换成户外露营，食材换成草莓、燕麦奶、猕猴桃。<br>
+<img src="docs/cases/remake/juicer.gif"><br>
+<a href="docs/cases/remake/juicer_compare.mp4">高清对比视频（带声音）</a> · <a href="docs/cases/remake/juicer_sheet.jpg">同一时刻抽帧</a>
+</td></tr>
+</table>
+
+高清对比视频的声音用原片。原片和 OiiOii 版取自公众号文章，仅用于对比展示。
+
 ## 准不准
 
 按镜头时长算的「制作方式」准确率：
@@ -135,7 +165,8 @@ rea-video 不直接出片。它先逐个镜头判断是拍的、AI 生成的还�
 <details>
 <summary>能自动把整条视频复刻出来吗？</summary>
 
-部分可以。AI 镜头装了 [capsule-cinema](https://github.com/JuneYaooo/cheap-claude-video) 可以自动生成并拼回原时间线；实拍镜头要你按拍摄方案去拍；代码镜头要 agent 写 Remotion 工程。详见 [docs/replicate.md](docs/replicate.md)。
+可以做「换元素复刻」：用 [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) 的复刻配方，原片的运镜、动作、节奏和声音不变，把人物、产品、服装、场景换掉，整条自动生成并拼回原时间线（见上面的「复刻效果」）。
+想按原样重做：AI 镜头可以自动生成；实拍镜头要你按拍摄方案去拍；代码镜头要 agent 写 Remotion 工程。详见 [docs/replicate.md](docs/replicate.md)。
 
 </details>
 
@@ -159,6 +190,14 @@ rea-video 不直接出片。它先逐个镜头判断是拍的、AI 生成的还�
 ## 社区
 
 欢迎来 [linux.do](https://linux.do/) 交流使用体验、拆解案例和复刻思路。
+
+也欢迎加微信交流群：拆视频时遇到的问题、判断制作方式的方法、复刻经验和案例，都可以在群里交流、分享：
+
+<div align="center">
+<img src="docs/wechat-group-qr.jpg" width="260" alt="rea-video 微信交流群二维码">
+</div>
+
+微信群二维码 7 天会过期，扫不了或过期了就在 [issue](https://github.com/JuneYaooo/rea-video/issues) 里说一声，我们补一张新码。
 
 ## 致谢
 

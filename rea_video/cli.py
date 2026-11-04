@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from .util import LOG, load_env_files, read_json, setup_logging
+from .util import LOG, OCR_LANGS, load_env_files, read_json, setup_logging
 from .classify import LABELS
 from .vlm import vlm_note
 
@@ -26,8 +26,21 @@ def _env(args) -> None:
         LOG.debug("env loaded from %s", loaded)
 
 
+def _ocr_lang(args) -> None:
+    """--ocr-lang (or prefs ocr_lang) -> $REA_OCR_LANG, which overlay.get_ocr reads."""
+    from .memory import pref
+
+    lang = getattr(args, "ocr_lang", None) or pref("ocr_lang")
+    if lang:
+        if lang not in OCR_LANGS:
+            raise SystemExit(f"错误：不支持的 OCR 语言 {lang}（可选：{', '.join(OCR_LANGS)}）")
+        os.environ["REA_OCR_LANG"] = lang
+
+
 def cmd_decompose(args) -> int:
     from .pipeline import decompose
+
+    _ocr_lang(args)
 
     out = Path(args.out) if args.out else Path("out") / Path(args.video).stem
     from .memory import pref
@@ -107,6 +120,8 @@ def cmd_probe(args) -> int:
 
 def cmd_eval(args) -> int:
     from .evaluate import evaluate
+
+    _ocr_lang(args)
 
     res = evaluate(Path(args.labels), Path(args.out), use_vlm=args.vlm, ocr=not args.no_ocr, reuse=not args.fresh,
                    only=set(args.only.split(",")) if args.only else None, stems=args.stems)
@@ -332,6 +347,7 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--no-vlm", action="store_true", help="本次不开 VLM（覆盖 prefs 里的 vlm=on）")
     d.add_argument("--no-whole", action="store_true", help="跳过整片结构/文案 VLM 分析")
     d.add_argument("--no-ocr", action="store_true", help="不做 OCR（字幕/花字时间轴也会跳过，只剩贴纸检测）")
+    d.add_argument("--ocr-lang", choices=OCR_LANGS, help="字幕/花字的语言：zh 中英（默认）、ja 日文（首次使用自动下载识别模型）；也可用 prefs ocr_lang 设成默认")
     d.add_argument("--no-packaging", action="store_true", help="跳过剪辑包装层（整片字幕时间轴、花字、贴纸/动图、音效卡点）；省掉约每分钟 30–50 秒")
     d.add_argument("--workers", type=int, default=3)
     d.add_argument("--engine", help="复刻计划使用的 capsule-cinema 视频引擎（默认 prefs 里的 engine，否则 seedance2.0）")
@@ -354,6 +370,7 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("-o", "--out", default="out/eval")
     e.add_argument("--vlm", action="store_true")
     e.add_argument("--no-ocr", action="store_true")
+    e.add_argument("--ocr-lang", choices=OCR_LANGS, help="同 decompose --ocr-lang")
     e.add_argument("--fresh", action="store_true", help="不复用已有拆解结果")
     e.add_argument("--only", default="", help="只重新拆解这些 id（逗号分隔），其余复用缓存并重新分类")
     e.add_argument("--stems", action="store_true", help="对带音频真值的样本做人声分离，并在干声上重测唱/说")

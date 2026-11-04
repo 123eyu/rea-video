@@ -82,7 +82,7 @@ rea-video capsule-draft out/ref/breakdown.json --capsule-root $CC --capsule-name
 
 | 命令 | 作用 |
 |---|---|
-| `decompose VIDEO [--vlm] [--no-ocr] [--no-packaging]` | 拆解，输出 breakdown.json、report.html/md、storyboard.jpg、每镜首尾帧，以及 `packaging/`（字幕 SRT、带样式的 ASS、包装时间轴、贴纸截图）；`--no-packaging` 跳过包装层（省约每分钟 30–50 秒） |
+| `decompose VIDEO [--vlm] [--no-ocr] [--ocr-lang zh\|ja] [--no-packaging]` | 拆解，输出 breakdown.json、report.html/md、storyboard.jpg、每镜首尾帧，以及 `packaging/`（字幕 SRT、带样式的 ASS、包装时间轴、贴纸截图）；`--no-packaging` 跳过包装层（省约每分钟 30–50 秒）；`--ocr-lang ja` 用日文识别模型读字幕和花字（首次使用自动下载约 10 MB 到 `$REA_VIDEO_MODELS`，离线时可用 `$REA_OCR_REC_MODEL` 指向本地模型），`rea-video prefs ocr_lang ja` 可设成默认 |
 | `review OUT_DIR` | 给能看图的 agent 生成逐镜看图任务（review_tasks.json）和答案模板（review_answers.json） |
 | `apply-review OUT_DIR [ANSWERS] [--by NAME]` | 把 agent 看图的答案和确定性结果融合，重写 breakdown.json 和报告 |
 | `correct OUT_DIR --shots N --label L [--real yes/no] [--note]` | 用户指出判错：改正结论和报告，并记入记忆（以后同一文件自动套用，同类镜头复核时提示） |

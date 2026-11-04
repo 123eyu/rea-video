@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 900" width="960" height="900" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Noto Sans CJK SC, Source Han Sans SC, sans-serif">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <filter id="sh" x="-5%" y="-5%" width="110%" height="120%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <style>
+    .t{fill:#0f172a;font-size:15px}
+    .m{fill:#475569;font-size:13.5px}
+    .h{fill:#0f172a;font-size:17px;font-weight:700}
+    .n{fill:#fff;font-size:14px;font-weight:700}
+    .w{fill:#fff;font-size:15px;font-weight:700}
+    .ln{stroke:#64748b;stroke-width:1.8;fill:none}
+  </style>
+  <rect x="0" y="0" width="960" height="900" rx="18" fill="#f8fafc"/>
+
+  <text x="40" y="44" fill="#0f172a" font-size="23" font-weight="800">REA: reverse-engineer how a video was made, then how to remake it</text>
+  <text x="40" y="70" class="m">Per-shot evidence → fused verdict → remake organized by how it was made (AI units / shoots / code)</text>
+
+  <!-- 1 input -->
+  <g filter="url(#sh)">
+    <rect x="40" y="94" width="250" height="62" rx="12" fill="#fff" stroke="#cbd5e1"/>
+    <rect x="320" y="94" width="290" height="62" rx="12" fill="#fff" stroke="#cbd5e1"/>
+    <rect x="640" y="94" width="280" height="62" rx="12" fill="#fff" stroke="#cbd5e1"/>
+  </g>
+  <text x="60" y="121" class="h">A video</text>
+  <text x="60" y="143" class="m">Douyin · TikTok · WeChat · your own</text>
+  <text x="340" y="121" class="h">① Cut shots</text>
+  <text x="340" y="143" class="m">first / middle / last frame per shot</text>
+  <text x="660" y="121" class="h">Split audio</text>
+  <text x="660" y="143" class="m">mix / dry vocals / music</text>
+  <path class="ln" d="M290,125 H316" marker-end="url(#ah)"/>
+  <path class="ln" d="M610,125 H636" marker-end="url(#ah)"/>
+  <path class="ln" d="M480,156 V186" marker-end="url(#ah)"/>
+
+  <!-- 2 evidence -->
+  <rect x="40" y="190" width="880" height="214" rx="14" fill="#fff" stroke="#e2e8f0"/>
+  <text x="60" y="218" class="h">② Per-shot evidence</text>
+  <text x="262" y="218" class="m">every conclusion comes with checkable evidence</text>
+
+  <rect x="60" y="234" width="262" height="154" rx="10" fill="#eff6ff" stroke="#bfdbfe"/>
+  <rect x="60" y="234" width="262" height="32" rx="10" fill="#2563eb"/><rect x="60" y="254" width="262" height="12" fill="#2563eb"/>
+  <text x="76" y="256" class="w">Pixel forensics (offline, free)</text>
+  <text x="76" y="290" class="t">frame rate, dup frames (24→30)</text>
+  <text x="76" y="314" class="t">noise, texture, motion, zoom / pan</text>
+  <text x="76" y="338" class="t">Metadata: AIGC labels, device</text>
+  <text x="76" y="362" class="t">OCR text track, faces, subjects</text>
+
+  <rect x="349" y="234" width="262" height="154" rx="10" fill="#faf5ff" stroke="#e9d5ff"/>
+  <rect x="349" y="234" width="262" height="32" rx="10" fill="#9333ea"/><rect x="349" y="254" width="262" height="12" fill="#9333ea"/>
+  <text x="365" y="256" class="w">Visual reading (VLM or agent)</text>
+  <text x="365" y="290" class="t">content, category and evidence</text>
+  <text x="365" y="314" class="t">reverse-engineered prompts</text>
+  <text x="365" y="338" class="t">shot size, camera angle, lighting</text>
+  <text x="365" y="362" class="t">structure, hook, copy</text>
+
+  <rect x="638" y="234" width="262" height="154" rx="10" fill="#f0fdfa" stroke="#99f6e4"/>
+  <rect x="638" y="234" width="262" height="32" rx="10" fill="#0d9488"/><rect x="638" y="254" width="262" height="12" fill="#0d9488"/>
+  <text x="654" y="256" class="w">Audio breakdown</text>
+  <text x="654" y="290" class="t">voice · music · SFX timing</text>
+  <text x="654" y="314" class="t">BPM, key, sections, beat cuts</text>
+  <text x="654" y="338" class="t">script and voice (TTS / human)</text>
+  <text x="654" y="362" class="t">AI-generated or stock music</text>
+  <path class="ln" d="M480,404 V430" marker-end="url(#ah)"/>
+
+  <!-- 3 judge -->
+  <rect x="40" y="434" width="880" height="118" rx="14" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="60" y="462" class="h">③ Fuse verdicts</text>
+  <text x="60" y="490" class="t">Per shot: base layer (live-action / AI video / 3D / code / screen / still pan / still / avatar)</text>
+  <text x="60" y="514" class="t">+ overlays + which footage is real + how it was shot, lit and edited</text>
+  <text x="60" y="538" class="m">Hard evidence first (AIGC labels, frame-rate patterns &gt; impressions); unsure → flagged for review, never forced</text>
+  <g filter="url(#sh)"><rect x="736" y="452" width="166" height="44" rx="22" fill="#fff" stroke="#f59e0b"/></g>
+  <text x="756" y="479" fill="#b45309" font-size="14" font-weight="700">fixes → memory</text>
+  <path class="ln" d="M480,552 V578" marker-end="url(#ah)"/>
+
+  <!-- 4 plan -->
+  <rect x="40" y="582" width="880" height="226" rx="14" fill="#fff" stroke="#e2e8f0"/>
+  <text x="60" y="610" class="h">④ Remake plan</text>
+  <text x="230" y="610" class="m">grouped by how it was made, not one job per shot</text>
+
+  <rect x="60" y="626" width="196" height="166" rx="10" fill="#fdf2f8" stroke="#fbcfe8"/>
+  <text x="76" y="654" fill="#be185d" font-size="16" font-weight="700">Capability map</text>
+  <text x="76" y="680" class="t">max length per model</text>
+  <text x="76" y="704" class="t">multi-shot in one call?</text>
+  <text x="76" y="728" class="t">reference images / videos</text>
+  <text x="76" y="752" class="t">native audio, routing rules</text>
+  <text x="76" y="776" class="m">capabilities/</text>
+  <path class="ln" d="M256,709 H280" marker-end="url(#ah)"/>
+
+  <g font-size="15">
+    <rect x="286" y="626" width="616" height="30" rx="8" fill="#fae8ff"/>
+    <text x="300" y="646" fill="#86198f" font-weight="700">AI → gen units</text>
+    <text x="462" y="646" class="t">same-scene shots in one call: multi-shot prompt + @refs</text>
+    <rect x="286" y="660" width="616" height="30" rx="8" fill="#dcfce7"/>
+    <text x="300" y="680" fill="#166534" font-weight="700">Live → shoots</text>
+    <text x="462" y="680" class="t">shoot same-scene, same-angle shots together; lights, gear</text>
+    <rect x="286" y="694" width="616" height="30" rx="8" fill="#fef3c7"/>
+    <text x="300" y="714" fill="#92400e" font-weight="700">Code → compose</text>
+    <text x="462" y="714" class="t">rebuilt in Remotion / HTML from text track and layout</text>
+    <rect x="286" y="728" width="616" height="30" rx="8" fill="#ede9fe"/>
+    <text x="300" y="748" fill="#5b21b6" font-weight="700">Still pan → local</text>
+    <text x="462" y="748" class="t">one image + measured zoom / pan, rendered by ffmpeg</text>
+    <rect x="286" y="762" width="616" height="30" rx="8" fill="#ccfbf1"/>
+    <text x="300" y="782" fill="#115e59" font-weight="700">Audio → 3 tracks</text>
+    <text x="462" y="782" class="t">TTS voice-over · BGM (BPM / key / style) · SFX timeline</text>
+  </g>
+  <path class="ln" d="M480,808 V826" marker-end="url(#ah)"/>
+
+  <!-- 5 output -->
+  <g filter="url(#sh)">
+    <rect x="40" y="830" width="290" height="52" rx="12" fill="#16a34a"/>
+    <rect x="370" y="830" width="250" height="52" rx="12" fill="#fff" stroke="#86efac"/>
+    <rect x="660" y="830" width="260" height="52" rx="12" fill="#fff" stroke="#86efac"/>
+  </g>
+  <text x="58" y="855" class="w">⑤ Report</text>
+  <text x="140" y="855" fill="#dcfce7" font-size="13.5">verdict · plan · shots</text>
+  <text x="58" y="874" fill="#dcfce7" font-size="13">report.html · breakdown.json</text>
+  <text x="388" y="855" fill="#166534" font-size="15" font-weight="700">Generate (capsule-cinema)</text>
+  <text x="388" y="874" class="m">AI shots via video models</text>
+  <text x="678" y="855" fill="#166534" font-size="15" font-weight="700">Back on the original timeline</text>
+  <text x="678" y="874" class="m">remake + side-by-side compare</text>
+  <path class="ln" d="M330,856 H366" marker-end="url(#ah)"/>
+  <path class="ln" d="M620,856 H656" marker-end="url(#ah)"/>
+  <path d="M902,474 H936 V856 H924" fill="none" stroke="#f59e0b" stroke-width="1.6" stroke-dasharray="5 4" marker-start="url(#ah)"/>
+</svg>

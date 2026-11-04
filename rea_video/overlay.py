@@ -7,26 +7,81 @@
 3. Persistent template: regions frozen across *all* shots (layout skins, watermarks)."""
 from __future__ import annotations
 
+import hashlib
+import os
+import urllib.request
+import uuid
+from pathlib import Path
+
 import cv2
 import numpy as np
 
-from .util import LOG
+from .util import LOG, OCR_LANGS
 
-_OCR = None
-_OCR_FAILED = False
+# Recognition models for languages other than the bundled Chinese/English one. Detection stays the bundled
+# model, which finds Japanese text lines fine; only the recognizer's character set has to change. The ONNX
+# files from RapidOCR carry their character list in the model metadata, so no separate dict is needed.
+_REC_MODELS = {
+    "ja": ("japan_PP-OCRv4_rec_mobile.onnx",
+           "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv4/rec/japan_PP-OCRv4_rec_mobile.onnx",
+           "e1075a67dba758ecfc7ebc78a10ae61c95ac8fb66a9c86fab5541e33f085cb7a"),
+}
+_OCR: dict = {}  # language -> RapidOCR instance, or None when it could not be loaded
+
+
+def ocr_lang() -> str:
+    """Subtitle language for OCR: $REA_OCR_LANG (set by --ocr-lang / prefs ocr_lang), default zh."""
+    lang = os.getenv("REA_OCR_LANG", "zh").strip().lower() or "zh"
+    if lang not in OCR_LANGS:
+        raise ValueError(f"unsupported OCR language {lang!r} (choose from {', '.join(OCR_LANGS)})")
+    return lang
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def rec_model(lang: str) -> Path:
+    """Path of the recognition model for `lang`: $REA_OCR_REC_MODEL if set, else downloaded once and cached
+    in $REA_VIDEO_MODELS next to the stem model."""
+    override = os.getenv("REA_OCR_REC_MODEL")
+    if override:
+        return Path(override).expanduser()
+    from .stems import models_dir
+
+    name, url, sha = _REC_MODELS[lang]
+    p = models_dir() / name
+    if p.is_file() and _sha256(p) == sha:
+        return p
+    p.parent.mkdir(parents=True, exist_ok=True)
+    LOG.info("downloading OCR model %s -> %s", name, p)
+    tmp = p.with_name(f"{p.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.part")
+    try:
+        urllib.request.urlretrieve(url, tmp)
+        if _sha256(tmp) != sha:
+            raise OSError(f"checksum mismatch for {name}")
+        tmp.replace(p)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return p
 
 
 def get_ocr():
-    global _OCR, _OCR_FAILED
-    if _OCR is None and not _OCR_FAILED:
+    lang = ocr_lang()
+    if lang not in _OCR:
         try:
             from rapidocr_onnxruntime import RapidOCR  # type: ignore
 
-            _OCR = RapidOCR()
-        except Exception as exc:  # pragma: no cover - optional dependency
-            LOG.warning("OCR disabled (pip install rapidocr-onnxruntime to enable): %s", exc)
-            _OCR_FAILED = True
-    return _OCR
+            kwargs = {"rec_model_path": str(rec_model(lang))} if lang in _REC_MODELS else {}
+            _OCR[lang] = RapidOCR(**kwargs)
+        except Exception as exc:  # pragma: no cover - optional dependency / offline
+            LOG.warning("OCR disabled (pip install rapidocr-onnxruntime to enable; lang=%s): %s", lang, exc)
+            _OCR[lang] = None
+    return _OCR[lang]
 
 
 def _boxes_from_mask(mask: np.ndarray, min_area_frac: float = 0.002) -> list[list[int]]:

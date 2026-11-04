@@ -32,7 +32,7 @@ VLM（能看图的多模态模型）建议配，不强制，配置方法也在 `
 # ⓪ 先看记住了什么：用户偏好（默认引擎、是否开 VLM、给你的偏好说明）和常见纠正类型
 rea-video memory
 # ① 拆解（产出 out/<名>/breakdown.json、report.html、report.md、storyboard.jpg、audio.png、shots/、stems/）
-rea-video --env-file <你的 .env> decompose ref.mp4 -o out/ref --vlm   # 没有 VLM 配置就去掉 --env-file 和 --vlm
+rea-video --env-file <你的 .env> decompose ref.mp4 -o out/ref --vlm   # 没有 VLM 配置就去掉 --env-file 和 --vlm；字幕/花字是日文就加 --ocr-lang ja
 # ② 看紧凑摘要：低置信镜头会被标出；先看 VLM: 那一行确认 VLM 是否生效
 rea-video summary out/ref/breakdown.json
 ```
