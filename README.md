@@ -45,7 +45,7 @@ rea-video 判断：左边全部实拍，一个场景、两个机位就能拍完�
 rea-video 是给 AI 助手用的。在 Claude Code、Codex 这类能运行命令的 agent 里说：
 
 ```text
-安装 https://github.com/123eyu/rea-video ，然后拆解这条视频：/path/to/video.mp4
+安装 https://github.com/JuneYaooo/rea-video ，然后拆解这条视频：/path/to/video.mp4
 ```
 
 agent 会自己装好命令行工具、读完拆解流程，然后从头跑完。电脑上需要有 ffmpeg 和 Python 3.10 以上。
