@@ -28,6 +28,14 @@ def _aspect(b: dict) -> str:
     return ar if ar in ("9:16", "16:9", "1:1") else "unknown"
 
 
+TRANS_ZH = {"cut": "硬切", "flash": "闪亮切", "fade": "淡入淡出", "dissolve": "叠化", "mg_transition": "版式切换", "start": "开场"}
+
+
+def _top_tr(s: dict) -> str:
+    tr = {k: v for k, v in s["transitions"].items() if k != "start"} or s["transitions"]
+    return max(tr, key=tr.get)
+
+
 def _mmss(t: float) -> str:
     return fmt_time(t)
 
@@ -95,7 +103,7 @@ def export_capsule_analysis(b: dict, out_path: Path) -> Path:
     lens = [x["duration"] for x in shots]
     structure_rules = [
         f"全片约 {s['duration']:.0f}s，{s['shots']} 个镜头，平均每镜 {s['avg_shot_s']}s（最短 {min(lens):.1f}s，最长 {max(lens):.1f}s）",
-        f"转场以 {max(s['transitions'], key=s['transitions'].get)} 为主：" + "、".join(f"{k}×{v}" for k, v in s["transitions"].items()),
+        f"转场以 {TRANS_ZH.get(_top_tr(s), _top_tr(s))} 为主：" + "、".join(f"{TRANS_ZH.get(k, k)}×{v}" for k, v in s["transitions"].items() if k != "start"),
     ]
     if whole.get("hook"):
         structure_rules.append(f"开头钩子：{whole['hook']}")
@@ -200,10 +208,13 @@ def export_capsule_analysis(b: dict, out_path: Path) -> Path:
     return out_path
 
 
-def build_remake_jobs(b: dict, bdir: Path, capsule_root: Path, engine: str = "seedance2.0",
+def build_remake_jobs(b: dict, bdir: Path, capsule_root: Path, engine: str | None = None,
                       mode: str = "first_last_frame", labels: list[str] | None = None) -> Path:
     """Write jobs.json for `rea-video remake-run` (rea_video/integrations/run_remake.py).
-    Output dirs live under <capsule_root>/output/ to satisfy capsule-cinema's output guard."""
+    Output dirs live under <capsule_root>/output/ to satisfy capsule-cinema's output guard.
+    engine: overrides the engine planned at decompose time (None keeps the plan's)."""
+    from ..plan import CAPSULE_ENGINES
+
     labels = labels or list(AI_LABELS)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     slug = re.sub(r"[^A-Za-z0-9_-]+", "_", Path(b["source"]["filename"]).stem)[:40]
@@ -226,9 +237,13 @@ def build_remake_jobs(b: dict, bdir: Path, capsule_root: Path, engine: str = "se
         prompt = cap.get("prompt") or ((sh.get("vlm") or {}).get("description")) or ""
         if not prompt:
             prompt = f"保持参考图的画面、主体与风格，{CAMERA_ZH.get(sh['features'].get('camera', 'unknown'), '')}，自然连贯的动作"
+        eng = engine or cap.get("engine") or "seedance2.0"
+        gen_dur = cap.get("duration", 5)
+        if eng != cap.get("engine"):  # planned for another engine: re-fit the clip length to this one's limits
+            lo, hi = CAPSULE_ENGINES.get(eng, (4, 15))
+            gen_dur = int(min(hi, max(lo, round(sh["duration"] + 0.49))))
         params = {"prompt": prompt, "output_dir": str(run_dir / sh["id"]), "generation_type": gen_type,
-                  "engine": cap.get("engine", engine), "aspect_ratio": cap.get("aspect_ratio", "9:16"),
-                  "duration": cap.get("duration", 5)}
+                  "engine": eng, "aspect_ratio": cap.get("aspect_ratio", "9:16"), "duration": gen_dur}
         first = str((bdir / sh["assets"]["first_frame"]).resolve())
         last = str((bdir / sh["assets"]["last_frame"]).resolve())
         if gen_type == "first_last_frame":
@@ -242,5 +257,5 @@ def build_remake_jobs(b: dict, bdir: Path, capsule_root: Path, engine: str = "se
                      "warning": "原镜头是真实素材：生成结果只是近似，建议换成你自己的素材" if rep.get("user_assets") else ""})
     out = bdir / "remake" / "jobs.json"
     write_json(out, {"breakdown": str((bdir / "breakdown.json").resolve()), "capsule_root": str(capsule_root),
-                     "run_dir": str(run_dir), "engine": engine, "mode": mode, "jobs": jobs})
+                     "run_dir": str(run_dir), "engine": engine or b.get("engine") or "seedance2.0", "mode": mode, "jobs": jobs})
     return out

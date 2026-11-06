@@ -5,6 +5,8 @@ entered the pipeline; an AIGC label means a generator declared itself) but it is
 stripped by social platforms, so absence proves nothing."""
 from __future__ import annotations
 
+from .i18n import LangDict, T, join
+
 import json
 import re
 from pathlib import Path
@@ -59,18 +61,48 @@ def _flatten_tags(raw: dict) -> dict[str, str]:
     return tags
 
 
-def _scan_bytes(path: Path, limit: int = 4 << 20) -> bytes:
+_SKIP_BOXES = {b"mdat", b"free", b"skip", b"wide"}
+
+
+def _scan_bytes(path: Path, limit: int = 8 << 20) -> bytes:
+    """Metadata bytes of an MP4/MOV: every top-level box except mdat (compressed frames contain random
+    ASCII like "vEo"). Other containers fall back to the first / last 4 MB."""
     size = path.stat().st_size
+    out: list[bytes] = []
     with path.open("rb") as f:
-        head = f.read(min(limit, size))
+        pos, total, iso = 0, 0, False
+        while pos + 8 <= size and total < limit:
+            f.seek(pos)
+            hdr = f.read(16)
+            box_size, kind, head = int.from_bytes(hdr[:4], "big"), hdr[4:8], 8
+            if not re.fullmatch(rb"[a-zA-Z0-9 \xa9]{4}", kind):
+                break
+            if box_size == 1 and len(hdr) >= 16:
+                box_size, head = int.from_bytes(hdr[8:16], "big"), 16
+            elif box_size == 0:
+                box_size = size - pos
+            if box_size < head:
+                break
+            iso = iso or kind == b"ftyp"
+            if kind not in _SKIP_BOXES:
+                f.seek(pos)
+                chunk = f.read(min(box_size, limit - total))
+                out.append(chunk)
+                total += len(chunk)
+            pos += box_size
+        if iso:
+            return b"".join(out)
+        f.seek(0)
+        head_bytes = f.read(min(4 << 20, size))
         tail = b""
-        if size > limit:
-            f.seek(max(0, size - limit))
-            tail = f.read(limit)
-    return head + tail
+        if size > 4 << 20:
+            f.seek(max(0, size - (4 << 20)))
+            tail = f.read(4 << 20)
+    return head_bytes + tail
 
 
-AIGC_LABEL_ZH = {"1": "属于 AI 生成合成内容", "2": "可能为 AI 生成合成内容", "3": "疑似 AI 生成合成内容"}
+AIGC_LABEL_ZH = LangDict({"1": "属于 AI 生成合成内容", "2": "可能为 AI 生成合成内容", "3": "疑似 AI 生成合成内容"},
+                         en={"1": "labelled as AI-generated synthetic content", "2": "possibly AI-generated synthetic content", "3": "suspected AI-generated synthetic content"})
 
 
 def parse_aigc(value: str) -> dict | None:
@@ -88,7 +120,7 @@ def parse_aigc(value: str) -> dict | None:
     if not isinstance(data, dict):
         return None
     label = str(data.get("Label", data.get("label", ""))).strip()
-    return {"label": label, "meaning": AIGC_LABEL_ZH.get(label, "未知取值"),
+    return {"label": label, "meaning": AIGC_LABEL_ZH.get(label, T("未知取值", "unknown value")),
             "content_producer": data.get("ContentProducer", ""), "produce_id": data.get("ProduceID", ""),
             "content_propagator": data.get("ContentPropagator", ""), "propagate_id": data.get("PropagateID", "")}
 
@@ -101,7 +133,7 @@ def provenance(info: VideoInfo) -> dict:
     path = Path(info.path)
     tags = _flatten_tags(info.raw)
     evidence: list[dict] = []
-    hints: dict[str, list[str]] = {"generator": [], "editor": [], "renderer": [], "camera": [], "screen": [], "platform": []}
+    hints: dict[str, list[str]] = {"generator": [], "generator_weak": [], "editor": [], "renderer": [], "camera": [], "screen": [], "platform": []}
 
     lower_tags = {k.lower(): v for k, v in tags.items()}
     aigc = None
@@ -110,12 +142,14 @@ def provenance(info: VideoInfo) -> dict:
         if short in CAMERA_KEYS:
             hints["camera"].append(f"{short}={value}")
         if any(a in short for a in AIGC_KEYS) or re.search(r"\baigc\b", value, re.I):
-            aigc = parse_aigc(value) or {"label": "", "meaning": "无法解析", "raw": value[:200]}
+            aigc = parse_aigc(value) or {"label": "", "meaning": T("无法解析", "could not be parsed"), "raw": value[:200]}
             strong = aigc.get("label") in ("1", "2", "3")
-            evidence.append({"kind": "aigc_label", "detail": f"AIGC 隐式标识 Label={aigc.get('label')}（{aigc.get('meaning')}），"
-                             f"生成服务方编码 {aigc.get('content_producer') or '—'}", "weight": "strong" if strong else "weak"})
+            evidence.append({"kind": "aigc_label", "detail": T("AIGC 隐式标识 Label={l}（{m}），生成服务方编码 {p}",
+                                                               "Implicit AIGC label Label={l} ({m}), content producer code {p}",
+                                                               l=aigc.get('label'), m=aigc.get('meaning'), p=aigc.get('content_producer') or '—'),
+                             "weight": "strong" if strong else "weak"})
             if aigc.get("label") == "1":
-                hints["generator"].append(f"AIGC 标识（{aigc.get('meaning')}）")
+                hints["generator"].append(T("AIGC 标识（{m}）", "AIGC label ({m})", m=aigc.get('meaning')))
 
     blob = " ".join(f"{k}={v}" for k, v in tags.items() if "aigc" not in k.lower())
     raw_bytes = _scan_bytes(path)
@@ -123,15 +157,20 @@ def provenance(info: VideoInfo) -> dict:
     for pattern, cat, label in SIGNATURES:
         if re.search(pattern, blob, re.I):
             hints[cat].append(label)
-            evidence.append({"kind": f"{cat}_signature", "detail": f"元数据包含 {label}", "weight": "medium"})
+            evidence.append({"kind": f"{cat}_signature", "detail": T("元数据包含 {l}", "Metadata contains {l}", l=label), "weight": "medium"})
         elif cat in ("generator", "renderer", "editor") and re.search(rf"\b(?:{pattern})\b", strings, re.I):
-            # weaker: readable string inside container boxes (udta/uuid/xmp)
-            hints[cat].append(f"{label}?")
-            evidence.append({"kind": f"{cat}_bytes", "detail": f"容器内可读字符串出现 {label}", "weight": "weak"})
+            # weaker: readable string inside container boxes (udta/uuid/xmp); a generator name here is only a hint
+            # for the report, it does not move the score (short names like "veo" also occur by chance)
+            hints[f"{cat}_weak" if cat == "generator" else cat].append(f"{label}?")
+            evidence.append({"kind": f"{cat}_bytes", "detail": T("容器内可读字符串出现 {l}", "Readable string {l} found inside the container", l=label), "weight": "weak"})
 
     if b"c2pa" in raw_bytes or b"jumb" in raw_bytes:
-        evidence.append({"kind": "c2pa", "detail": "发现 C2PA/JUMBF 内容凭证盒", "weight": "strong"})
-        hints["generator"].append("C2PA 凭证")
+        # cameras (Pixel, Leica ...) sign C2PA too: only a generator named alongside the manifest counts as AI
+        named = hints["generator_weak"]
+        evidence.append({"kind": "c2pa", "detail": T("发现 C2PA/JUMBF 内容凭证盒", "C2PA / JUMBF content-credential box found")
+                         + (f"（{', '.join(named)}）" if named else ""), "weight": "strong" if named else "medium"})
+        if named:
+            hints["generator"].append(T("C2PA 凭证", "C2PA credential") + "：" + ", ".join(n.rstrip("?") for n in named))
     if hints["camera"]:
         evidence.append({"kind": "camera_tags", "detail": "; ".join(hints["camera"][:4]), "weight": "strong"})
 

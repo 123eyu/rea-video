@@ -5,6 +5,6 @@
   "author": { "name": "June" },
   "homepage": "https://github.com/JuneYaooo/rea-video",
   "repository": "https://github.com/JuneYaooo/rea-video",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": ["video", "forensics", "ai-video", "remake"]
 }

@@ -25,11 +25,13 @@ import math
 import re
 from difflib import SequenceMatcher
 
+from .i18n import LangDict, T, join
+
 LABELS = ["live_action", "ai_video", "avatar", "cg_3d", "code_render", "screen_capture", "still_motion", "static_hold",
           "anim_2d", "stop_motion"]
 # labels the deterministic layer cannot score: decided by image readers only (see pipeline._vlm_gate)
 UNMEASURED = ("anim_2d", "stop_motion")
-LABEL_ZH = {
+LABEL_ZH = LangDict({
     "live_action": "实拍",
     "ai_video": "AI 生成视频",
     "avatar": "数字人口播",
@@ -40,8 +42,20 @@ LABEL_ZH = {
     "static_hold": "静帧停留",
     "anim_2d": "2D 动画",
     "stop_motion": "定格动画",
-}
-IMAGE_SOURCE_ZH = {"ai_image": "AI 生成图", "photo": "真实照片", "graphic": "设计/渲染图形", "screenshot": "截图", "unknown": "未知"}
+}, en={
+    "live_action": "live action",
+    "ai_video": "AI-generated video",
+    "avatar": "AI avatar (talking head)",
+    "cg_3d": "3D render",
+    "code_render": "code / template render",
+    "screen_capture": "screen recording / screenshot",
+    "still_motion": "still image + pan/zoom",
+    "static_hold": "static hold",
+    "anim_2d": "2D animation",
+    "stop_motion": "stop motion",
+})
+IMAGE_SOURCE_ZH = LangDict({"ai_image": "AI 生成图", "photo": "真实照片", "graphic": "设计/渲染图形", "screenshot": "截图", "unknown": "未知"},
+                           en={"ai_image": "AI-generated image", "photo": "photo", "graphic": "designed / rendered graphic", "screenshot": "screenshot", "unknown": "unknown"})
 # how much to trust the deterministic layer per label (VLM weight is 1.0)
 DET_WEIGHT = {"static_hold": 1.6, "still_motion": 1.4, "code_render": 1.0, "screen_capture": 0.6,
               "cg_3d": 0.5, "live_action": 0.6, "ai_video": 0.6, "avatar": 0.4, "anim_2d": 0.3, "stop_motion": 0.3}
@@ -75,6 +89,25 @@ RULES = {
     "ui_text": {"height": 0.02, "mid": 4.5, "width": 0.7},
     # an avatar is a fixed frame; a moving / shaking camera argues for someone filming
     "avatar_moving_camera": 0.3,
+    # fine graphics on black (particles, point clouds, thin lines, small text): the lit part has almost no gently
+    # shaded pixels and many small bright peaks. Eval photo / 3D / AI frames on dark ground keep lit_smooth >= 0.47
+    # and lit_peaks <= 10; a particle explainer video sits at lit_smooth 0.01-0.22, lit_peaks 5-67
+    "fine_dark": {"dark": 0.4, "smooth": 0.3, "peaks": 4.0, "lit_max": 0.4, "lit_min": 0.002},
+    # thin dark lines / dots on a light ground: fine_dark on the inverted picture, with a looser smoothness bound
+    # (anti-aliased dark strokes shade more than glowing dots)
+    "fine_light": {"smooth": 0.35},
+    # pictures made of vector fills, gradients and glows (no material texture). tex_fine = share of pixels with
+    # fine detail left after a median filter and removing the smooth component (high-pass), so gradients and glows
+    # count as zero and light film grain is mostly removed. Eval photo / AI shots >= 0.12 except one compressed
+    # night street shot at 0.066; Blender plush >= 0.073 (plain walls, nearly colourless: sat_p90 <= 0.35); code
+    # gradients 0.006-0.04, glass / neon / dashboards 0.03-0.13. The gradient test cuts at 0.06 and needs colour,
+    # the colour-field and neon tests cut at 0.12 and need saturated colour. dark_guard: a rendered dark ground is
+    # exactly flat (dark_flat >= 0.85 in the code sets); night footage keeps grain (dark_flat <= 0.77).
+    # Procedural colour fields (fractals, shaders) are textured but almost all vivid (> 0.9) and either rainbow
+    # (plasma: 8 hue bands) or very cleanly curving (fractal zoom 0.93). Vivid AI cartoons (capybara / lulukong in
+    # holdout) reach vivid 0.97 but keep 2-3 hue bands and grad_clean <= 0.86
+    "vector_fill": {"tex": 0.06, "grad": 0.12, "sat": 0.3, "vivid": 0.3, "vivid_tex": 0.12, "dark_flat": 0.8,
+                    "neon_dark": 0.6, "neon_sat": 0.8, "neon_tex": 0.12, "rainbow": 0.85, "hues": 4.5, "clean": 0.9},
 }
 
 
@@ -131,14 +164,18 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
     sparse_anim = dup > 0.6 and moving > 0.01
     if frozen and not sparse_anim and f.get("start_end_mad", 0) < 1.0:
         family = "frozen"
-        ev.append(f"画面几乎完全静止：{dup:.0%} 的相邻帧逐像素重复，首尾帧差 {f.get('start_end_mad', 0):.2f}")
+        ev.append(T("画面几乎完全静止：{dup:.0%} 的相邻帧逐像素重复，首尾帧差 {mad:.2f}",
+                    "Picture is almost entirely still: {dup:.0%} of adjacent frames are pixel-identical, first-to-last frame difference {mad:.2f}",
+                    dup=dup, mad=f.get('start_end_mad', 0)))
     elif kb > 0.45:
         family = "planar"
-        ev.append(f"整帧按单一刚体变换运动（拟合内点 {f.get('rigid_inlier_ratio', 0):.0%}，残差 {f.get('rigid_residual', 0):.2f}px，无局部运动）"
-                  f"→ 静态图推拉：缩放 {f.get('zoom_per_s', 0) * 100:+.1f}%/s，平移 {f.get('pan_px_per_s', 0):.0f}px/s")
+        ev.append(T("整帧按单一刚体变换运动（拟合内点 {inl:.0%}，残差 {res:.2f}px，无局部运动）→ 静态图推拉：缩放 {zoom:+.1f}%/s，平移 {pan:.0f}px/s",
+                    "Whole frame moves as one rigid transform ({inl:.0%} inliers, {res:.2f}px residual, no local motion) → pan/zoom on a still image: zoom {zoom:+.1f}%/s, pan {pan:.0f}px/s",
+                    inl=f.get('rigid_inlier_ratio', 0), res=f.get('rigid_residual', 0), zoom=f.get('zoom_per_s', 0) * 100, pan=f.get('pan_px_per_s', 0)))
     elif dup > 0.5:
         family = "mostly_static"
-        ev.append(f"{dup:.0%} 的相邻帧完全重复，只有局部元素在动（典型的模板/MG 动画或定格后局部动效）")
+        ev.append(T("{dup:.0%} 的相邻帧完全重复，只有局部元素在动（典型的模板/MG 动画或定格后局部动效）",
+                    "{dup:.0%} of adjacent frames are exact duplicates, only local elements move (typical of template / motion-graphics animation, or a hold with local motion)", dup=dup))
     else:
         family = "dynamic"
     facts["temporal_family"] = family
@@ -153,8 +190,9 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
         # judge texture on the lit part only; the palette is small because the shadows are crushed
         lit_graphic = 0.75 * _sig((f.get("flat_lit", 0) - 0.20) / 0.05) + 0.25 * _sig((axis - 0.33) / 0.03)
         if lit_graphic < graphic:
-            ev.append(f"低照度画面：{f.get('dark_ratio', 0):.0%} 的区域接近全黑但带颗粒（不是纯色底），亮部平坦块只有 {f.get('flat_lit', 0):.0%}、"
-                      f"且有人脸：平坦块/少色是暗部被压缩造成的，不按渲染特征算")
+            ev.append(T("低照度画面：{dark:.0%} 的区域接近全黑但带颗粒（不是纯色底），亮部平坦块只有 {lit:.0%}、且有人脸：平坦块/少色是暗部被压缩造成的，不按渲染特征算",
+                        "Low-light shot: {dark:.0%} of the frame is near-black but grainy (not a solid fill), flat blocks cover only {lit:.0%} of the lit part, and there is a face: the flat blocks / small palette come from crushed shadows, not counted as rendered texture",
+                        dark=f.get('dark_ratio', 0), lit=f.get('flat_lit', 0)))
             graphic = lit_graphic
     # a large face held through the shot is a photographic picture: plain walls and dark clothes make flat blocks
     # after a platform transcode (RULES["big_face"])
@@ -163,8 +201,67 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
     facts["big_face"] = big_face
     facts["face_area"] = round(f.get("face_area", 0.0), 3) if faces >= 0.3 else 0.0
     if big_face and graphic > 0.25:
-        ev.append(f"人脸占画面 {f.get('face_area', 0):.0%}、{faces:.0%} 的采样帧都有：是人物近景画面，平坦色块多来自墙面/衣服，渲染特征降权")
+        ev.append(T("人脸占画面 {area:.0%}、{faces:.0%} 的采样帧都有：是人物近景画面，平坦色块多来自墙面/衣服，渲染特征降权",
+                    "A face covers {area:.0%} of the frame and appears in {faces:.0%} of sampled frames: a close-up of a person, flat colour blocks mostly come from walls / clothing, rendered-texture cues down-weighted",
+                    area=f.get('face_area', 0), faces=faces))
         graphic *= bf["graphic_factor"]
+    fd = RULES["fine_dark"]
+    fine_dark = 0.0
+    if fd["lit_min"] < f.get("lit_ratio", 0.0):
+        fine_dark = (_sig((f.get("dark_ratio", 0.0) - fd["dark"]) / 0.05) * _sig((fd["smooth"] - f.get("lit_smooth", 1.0)) / 0.05)
+                     * _sig((f.get("lit_peaks", 0.0) - fd["peaks"]) / 1.0) * _sig((fd["lit_max"] - f.get("lit_ratio", 0.0)) / 0.04))
+    facts["fine_dark"] = round(fine_dark, 3)
+    if fine_dark > 0.5:
+        ev.append(T("暗底上的亮部几乎全是细碎亮点/细线（亮部平滑过渡只占 {sm:.0%}，每百个亮像素 {pk:.0f} 个亮峰）：粒子/点云/线框类图形，"
+                    "不是有明暗过渡的实拍、3D 表面或 AI 画面",
+                    "On a dark ground the lit part is almost all fine dots / thin lines (only {sm:.0%} of lit pixels shade gently, "
+                    "{pk:.0f} bright peaks per 100 lit pixels): particle / point-cloud / wireframe graphics, not a shaded photo, 3D surface or AI picture",
+                    sm=f.get("lit_smooth", 0.0), pk=f.get("lit_peaks", 0.0)))
+        graphic = max(graphic, fine_dark)
+    # the same on a light ground: thin dark lines / dots (line art, generative ink, dot matrices). Pages of small text
+    # are left to the screenshot cues (RULES["ui_text"]), they are a document rather than line art
+    ut = RULES["ui_text"]
+    small_lines = sum(1 for tr in (text or {}).get("tracks", []) if tr.get("text_height", 1.0) < ut["height"])
+    fl = RULES["fine_light"]
+    fine_light = 0.0
+    if fd["lit_min"] < f.get("ink_ratio", 0.0):
+        fine_light = (_sig((f.get("light_ratio", 0.0) - fd["dark"]) / 0.05) * _sig((fl["smooth"] - f.get("ink_smooth", 1.0)) / 0.05)
+                      * _sig((f.get("ink_peaks", 0.0) - fd["peaks"]) / 1.0) * _sig((fd["lit_max"] - f.get("ink_ratio", 0.0)) / 0.04)
+                      * (1.0 - _sig((small_lines - ut["mid"]) / ut["width"])))
+    facts["fine_light"] = round(fine_light, 3)
+    if fine_light > 0.5:
+        ev.append(T("浅色底上的深色部分几乎全是细线/细点（平滑过渡只占 {sm:.0%}）：线稿、生成式线条或点阵图形，不是有明暗的实拍或 3D 表面",
+                    "On a light ground the dark part is almost all thin lines / dots (only {sm:.0%} shade gently): line art, generative strokes "
+                    "or dot graphics, not a shaded photo or 3D surface", sm=f.get("ink_smooth", 0.0)))
+        graphic = max(graphic, fine_light)
+    vf = RULES["vector_fill"]
+    tex = f.get("tex_fine", 1.0)
+    # a rendered dark ground is one exact colour; dark parts of night footage keep grain after transcoding
+    dark_guard = 1.0 - min(1.0, f.get("dark_ratio", 0.0) / 0.3) * (1.0 - _sig((f.get("dark_flat", 0.0) - vf["dark_flat"]) / 0.03))
+    vec_parts = {
+        # smooth coloured gradients with no texture at all (mesh-gradient backgrounds, CSS cards, UI)
+        "gradient": _sig((vf["tex"] - tex) / 0.01) * _sig((f.get("grad_share", 0.0) - vf["grad"]) / 0.04)
+                    * _sig((f.get("sat_p90", 0.0) - vf["sat"]) / 0.06),
+        # large saturated colour fields with little texture (flat illustration, glassmorphism, brand colour blocks)
+        "colour_fields": _sig((f.get("vivid", 0.0) - vf["vivid"]) / 0.08) * _sig((vf["vivid_tex"] - tex) / 0.02),
+        # saturated glow on a dark ground (neon text, glowing lines)
+        "neon": _sig((f.get("dark_ratio", 0.0) - vf["neon_dark"]) / 0.08) * _sig((f.get("sat_p90", 0.0) - vf["neon_sat"]) / 0.05)
+                * _sig((vf["neon_tex"] - tex) / 0.02),
+        # procedural rainbow colour fields (fractal zooms, plasma / noise shaders)
+        "procedural": _sig((f.get("vivid", 0.0) - vf["rainbow"]) / 0.02)
+                      * max(_sig((f.get("hue_n", 0.0) - vf["hues"]) / 0.3), _sig((f.get("grad_clean", 0.0) - vf["clean"]) / 0.01)),
+    }
+    vector = max(vec_parts.values()) * dark_guard * (1.0 - (0.8 if big_face else 0.0))
+    facts["vector_fill"] = round(vector, 3)
+    kind = max(vec_parts, key=vec_parts.get)
+    facts["vector_kind"] = kind if vector > 0.5 else None
+    if vector > 0.5:
+        what = {"gradient": T("平滑彩色渐变", "smooth colour gradients"), "colour_fields": T("大块饱和纯色", "large saturated colour fields"),
+                "neon": T("暗底上的饱和辉光", "saturated glow on a dark ground"), "procedural": T("程序生成的彩虹色场（分形/着色器）", "procedural rainbow colour fields (fractal / shader)")}[kind]
+        ev.append(T("画面由{what}构成、几乎没有材质纹理（细纹理像素 {tex:.0%}；实拍、AI 和 3D 渲染的布料/皮肤/噪点都会留下纹理）：代码绘制的矢量/渐变图形",
+                    "The picture is {what} with almost no material texture ({tex:.0%} fine-texture pixels; footage, AI and 3D renders keep fabric / skin / noise texture): vector / gradient graphics drawn by code",
+                    what=what, tex=tex))
+        graphic = max(graphic, vector)
     # (overlay text is a separate layer, so OCR coverage does not count toward the base)
     photo = 1.0 - graphic
     # fine high-frequency detail on flat ground = small text / UI (screenshots, docs, code cards)
@@ -176,20 +273,24 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
     ui_text = _sig((small_lines - ut["mid"]) / ut["width"])
     facts["ui_text"] = round(ui_text, 3)
     if ui_text > 0.5:
-        ev.append(f"OCR 读到 {small_lines} 行小字号文字：画面里有界面/文档截图")
+        ev.append(T("OCR 读到 {n} 行小字号文字：画面里有界面/文档截图", "OCR reads {n} lines of small text: the frame holds a UI / document screenshot", n=small_lines))
     # background pixels exactly unchanged while something moves = 2D compositing (code/MG)
     rsb = _sig((zero - 0.94) / 0.015) * _sig((0.1 - tnoise) / 0.03)
     facts["graphic_score"] = round(graphic, 3)
     facts["text_like"] = round(text_like, 3)
     facts["static_composite"] = round(rsb, 3)
     if graphic > 0.6:
-        ev.append(f"纹理呈渲染特征：平坦色块 {flat:.0%}、95% 像素仅用 {pal} 种颜色、横竖直边 {axis:.0%}")
+        ev.append(T("纹理呈渲染特征：平坦色块 {flat:.0%}、95% 像素仅用 {pal} 种颜色、横竖直边 {axis:.0%}",
+                    "Rendered texture: {flat:.0%} flat colour blocks, 95% of pixels use only {pal} colours, {axis:.0%} axis-aligned edges", flat=flat, pal=pal, axis=axis))
     elif graphic < 0.35:
-        ev.append(f"纹理呈照片/视频特征：噪声 σ={noise:.2f}、用色 {pal} 种、平坦块 {flat:.0%}")
+        ev.append(T("纹理呈照片/视频特征：噪声 σ={noise:.2f}、用色 {pal} 种、平坦块 {flat:.0%}",
+                    "Photographic texture: noise σ={noise:.2f}, {pal} colours, {flat:.0%} flat blocks", noise=noise, pal=pal, flat=flat))
     if text_like > 0.6:
-        ev.append("平坦底色上有大量细小高频细节（小字号文字/界面），像截图或文档画面")
+        ev.append(T("平坦底色上有大量细小高频细节（小字号文字/界面），像截图或文档画面",
+                    "Dense fine high-frequency detail on a flat background (small text / UI), looks like a screenshot or document"))
     if rsb > 0.6 and family != "frozen":
-        ev.append(f"背景 {zero:.0%} 像素逐帧完全不变、只有局部元素在动：2D 合成/代码动效特征")
+        ev.append(T("背景 {zero:.0%} 像素逐帧完全不变、只有局部元素在动：2D 合成/代码动效特征",
+                    "{zero:.0%} of background pixels never change frame to frame while local elements move: 2D compositing / code-driven motion graphics", zero=zero))
 
     # ---- frame-rate fingerprints -------------------------------------------------
     pulldown = None
@@ -204,10 +305,22 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
     resampled = (f.get("sharp_alt", 0) > 0.025 or f.get("sharp_period_ac", 0) > 0.45) and not ctx.get("transcoded")
     if resampled and not pulldown and family == "dynamic":
         pulldown = "interpolated"
-        ev.append(f"逐帧清晰度呈周期性起伏（周期 {f.get('sharp_period')} 帧，相关 {f.get('sharp_period_ac', 0):.2f}）：画面经过插帧/帧率转换，原始帧率更低")
+        ev.append(T("逐帧清晰度呈周期性起伏（周期 {p} 帧，相关 {ac:.2f}），但没有重复帧：可能是插帧/帧率转换，也可能只是重新压缩留下的节奏（去掉了平台标记的转码文件也会这样），单凭这一条不能定 AI",
+                    "Per-frame sharpness oscillates periodically (period {p} frames, correlation {ac:.2f}) with no duplicate frames: frame interpolation / rate conversion, or just the rhythm of a re-encode (transcodes whose platform tags were stripped show it too); not enough on its own to call AI",
+                    p=f.get('sharp_period'), ac=f.get('sharp_period_ac', 0)))
     facts["pulldown"] = pulldown
-    if pulldown:
-        ev.append(f"重复帧呈 {pulldown} 规律（{dup:.0%}，周期 {per}）：原始素材为 24/25fps 后转码，常见于 AI 生成视频、3D/动画渲染或电影素材")
+    # duplicate-frame pulldown is measured cadence; "interpolated" is only a sharpness rhythm, which any re-encode
+    # can fake when the platform tags that would switch it off are gone (re-compressed files, downloads with stripped metadata)
+    dup_pd = bool(pulldown) and pulldown != "interpolated"
+    # this shot's own cadence: a 30 fps file whose frames never repeat was captured at 30 fps (phones) rather than
+    # generated at 24 and pulled up. Per shot, unlike ctx["native30"], so a mixed edit (AI opener + phone footage)
+    # keeps the signature on the filmed shots. Platform re-encodes add a GOP sharpness rhythm, so that cue is skipped there.
+    facts["native_cadence"] = bool(fps and 29 <= fps <= 31 and dup < 0.02 and not pulldown
+                                   and (ctx.get("transcoded") or f.get("sharp_period_ac", 0) < 0.45))
+    if dup_pd:
+        ev.append(T("重复帧呈 {pd} 规律（{dup:.0%}，周期 {per}）：原始素材为 24/25fps 后转码，常见于 AI 生成视频、3D/动画渲染或电影素材",
+                    "Duplicate frames follow a {pd} pattern ({dup:.0%}, period {per}): a 24/25fps source transcoded up, typical of AI-generated video, 3D / animation renders or cinema footage",
+                    pd=pulldown, dup=dup, per=per))
 
     live_hint = 0.0
     live_hint += 1.2 * _sig((noise - 0.9) / 0.2)
@@ -215,38 +328,51 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
     live_hint += 0.3 * _sig((0.5 - zero) / 0.1)
     live_hint += 0.6 * (1.0 if f.get("camera") == "handheld_like" else 0.0)
     live_hint += 0.2 * (1.0 if dup < 0.03 else 0.0)
-    live_hint -= 0.9 * (1.0 if pulldown else 0.0)
+    live_hint -= (0.9 if dup_pd else 0.3 if pulldown else 0.0)
     # generators emit 24/25/30 fps; a native >=48 fps stream with no duplicated frames was
     # most likely captured by a phone/camera (or screen/game capture)
     native_hfr = bool(fps and fps >= 47 and dup < 0.05 and not pulldown)
     if native_hfr:
         live_hint += 1.0
-        ev.append(f"原生 {fps:.0f}fps 且几乎无重复帧：生成模型通常输出 24/30fps，高帧率原生素材多为手机/相机拍摄")
+        ev.append(T("原生 {fps:.0f}fps 且几乎无重复帧：生成模型通常输出 24/30fps，高帧率原生素材多为手机/相机拍摄",
+                    "Native {fps:.0f}fps with almost no duplicate frames: generators usually output 24/30fps, native high-frame-rate footage is mostly phone / camera captured", fps=fps))
     facts["native_hfr"] = native_hfr
     cam_tags = bool((provenance or {}).get("hints", {}).get("camera"))
     if cam_tags:
         live_hint += 1.0
-        ev.append("容器元数据含拍摄设备信息（make/model/location）")
+        ev.append(T("容器元数据含拍摄设备信息（make/model/location）", "Container metadata carries capture-device tags (make/model/location)"))
     if ctx.get("native30") and dup < 0.02 and not pulldown:
         live_hint += 0.9
-        ev.append(f"整片是原生 30fps、实拍类镜头没有 24fps 源的重复帧（{ctx.get('native30_share', 0):.0%} 时长）：手机直出常见，生成模型多输出 24fps")
+        ev.append(T("整片是原生 30fps、实拍类镜头没有 24fps 源的重复帧（{share:.0%} 时长）：手机直出常见，生成模型多输出 24fps",
+                    "The whole file is native 30fps and photographic shots carry no 24fps-source duplicate frames ({share:.0%} of the duration): typical of straight-from-phone footage, generators mostly output 24fps",
+                    share=ctx.get('native30_share', 0)))
     live_hint = min(1.0, max(0.0, live_hint / 2.9))
     gen_tags0 = bool((provenance or {}).get("hints", {}).get("generator"))
     degraded = bool(ctx.get("transcoded") and noise < 0.9)
     facts["transcode_degraded"] = degraded
-    if degraded and not pulldown and not gen_tags0 and live_hint < 0.45:
+    if degraded and not pulldown and not gen_tags0 and ctx.get("native30") and facts["native_cadence"] and live_hint < 0.55:
+        # the noise is gone but the camera cadence is not: native 30fps file, and this shot has it too
+        live_hint = 0.55
+        ev.append(T("经过平台二次转码（{plat}），传感器噪声被压没了；但整片和这一镜都是原生 30fps、没有 24fps 源的重复帧，按手机实拍算",
+                    "Platform transcode ({plat}) has compressed the sensor noise away, but the file and this shot are native 30fps with no 24fps-source duplicate frames: counted as phone footage",
+                    plat=join(ctx.get("platform", []))))
+    elif degraded and not pulldown and not gen_tags0 and live_hint < 0.45:
         # compression erased the sensor noise: its absence no longer argues for AI
         live_hint = 0.45
-        ev.append("经过平台二次转码（" + "、".join(ctx.get("platform", [])) + "），传感器噪声被压没了：噪声类证据失效，实拍还是 AI 主要看帧率和画面内容")
+        ev.append(T("经过平台二次转码（{plat}），传感器噪声被压没了：噪声类证据失效，实拍还是 AI 主要看帧率和画面内容",
+                    "Platform transcode ({plat}) has compressed the sensor noise away: noise cues no longer apply, live action vs AI rests on frame rate and picture content",
+                    plat=join(ctx.get("platform", []))))
     if live_hint > 0.6:
-        ev.append(f"时域噪声 {tnoise:.2f}、逐像素不变比例 {zero:.0%}：存在传感器噪声，符合实拍")
+        ev.append(T("时域噪声 {tn:.2f}、逐像素不变比例 {zero:.0%}：存在传感器噪声，符合实拍",
+                    "Temporal noise {tn:.2f}, {zero:.0%} of pixels unchanged frame to frame: sensor noise is present, consistent with live action", tn=tnoise, zero=zero))
     gen_tags = bool((provenance or {}).get("hints", {}).get("generator"))
     if gen_tags:
-        ev.append("容器元数据包含生成式工具/AIGC 标识：" + ", ".join(provenance["hints"]["generator"][:3]))
+        ev.append(T("容器元数据包含生成式工具/AIGC 标识：", "Container metadata carries a generative tool / AIGC label: ") + ", ".join(provenance["hints"]["generator"][:3]))
 
     speech = bool((audio or {}).get("speech_likely"))
     if faces > 0.6 and family in ("dynamic", "mostly_static") and f.get("camera") in ("static", "static_with_subject_motion"):
-        ev.append(f"{faces:.0%} 的采样帧有正脸且机位固定" + ("，音轨有人声" if speech else ""))
+        ev.append(T("{faces:.0%} 的采样帧有正脸且机位固定", "{faces:.0%} of sampled frames show a frontal face on a fixed camera", faces=faces)
+                  + (T("，音轨有人声", ", voice on the audio track") if speech else ""))
 
     # ---- assemble scores ---------------------------------------------------------
     s = {k: 0.02 for k in LABELS}
@@ -259,7 +385,8 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
     elif family == "planar":
         s["still_motion"] += 3.0 * kb * (0.35 if pulldown else 1.0)
         if pulldown:
-            ev.append("但运动带有 24fps 源的帧率转换痕迹：更像生成视频里的缓慢推镜，而不是剪辑软件对静图做推拉")
+            ev.append(T("但运动带有 24fps 源的帧率转换痕迹：更像生成视频里的缓慢推镜，而不是剪辑软件对静图做推拉",
+                        "But the motion carries 24fps-source frame-rate conversion marks: more likely a slow push-in inside a generated video than an editor's pan/zoom on a still"))
             s["ai_video"] += 1.2
         s["screen_capture"] += 0.5 * graphic * (1 if abs(f.get("zoom_per_s", 0)) < 0.003 else 0.2)  # pure scroll
         s["ai_video"] += 0.3
@@ -267,8 +394,9 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
         s["code_render"] += 1.6 * graphic * (1 + 0.5 * rsb) * (1 - 0.5 * text_like * _sig((0.12 - f.get("saturation", 0.3)) / 0.04))
         s["screen_capture"] += 1.5 * graphic * text_like * (0.3 + _sig((0.12 - f.get("saturation", 0.3)) / 0.04))
         s["static_hold"] += 0.5 * photo
-        s["cg_3d"] += 0.4 * graphic * (1 - text_like)
-        s["ai_video"] += 0.8 * photo * (1.4 if pulldown else 1.0)
+        s["cg_3d"] += 0.4 * graphic * (1 - text_like) * (1 - 0.8 * max(fine_dark, fine_light, vector))
+        s["code_render"] += 1.2 * graphic * max(fine_dark, fine_light, vector)
+        s["ai_video"] += 0.8 * photo * (1.4 if dup_pd else 1.0)
         s["live_action"] += 0.3 * photo * live_hint
     else:
         axis_f = 1.2 if axis > 0.38 else 0.8
@@ -276,14 +404,17 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
         # cards, dark editors), not shaded 3D renders: shading spreads colours, product 3D is coloured
         ui_gray = _sig((0.04 - f.get("saturation", 0.3)) / 0.01) * _sig((20 - pal) / 3)
         facts["ui_gray"] = round(ui_gray, 3)
-        s["code_render"] += 1.5 * graphic * (0.3 + 1.2 * rsb + 1.0 * text_like + 0.8 * ui_gray) * axis_f
-        s["cg_3d"] += 1.5 * graphic * max(0.0, 1.1 - rsb - 0.8 * text_like) * (1 - 0.8 * ui_gray) * (1 - 0.8 * ui_text)
+        code_cue = max(fine_dark, fine_light, vector)
+        s["code_render"] += 1.5 * graphic * (0.3 + 1.2 * rsb + 1.0 * text_like + 0.8 * ui_gray + 1.2 * code_cue) * axis_f
+        s["cg_3d"] += 1.5 * graphic * max(0.0, 1.1 - rsb - 0.8 * text_like) * (1 - 0.8 * ui_gray) * (1 - 0.8 * ui_text) * (1 - 0.8 * code_cue)
         s["screen_capture"] += 1.2 * graphic * ui_text
         if ui_gray > 0.5 and graphic > 0.6:
-            ev.append(f"画面几乎无彩色（饱和度 {f.get('saturation', 0):.2f}）、只用 {pal} 种颜色：界面/文档类平面画面，不是有光影的 3D 渲染")
+            ev.append(T("画面几乎无彩色（饱和度 {sat:.2f}）、只用 {pal} 种颜色：界面/文档类平面画面，不是有光影的 3D 渲染",
+                        "Nearly colourless frame (saturation {sat:.2f}) with only {pal} colours: a flat UI / document picture, not a shaded 3D render",
+                        sat=f.get('saturation', 0), pal=pal))
         s["screen_capture"] += 1.2 * graphic * text_like * (0.3 + _sig((0.12 - f.get("saturation", 0.3)) / 0.04))
         s["live_action"] += 1.5 * photo * live_hint
-        s["ai_video"] += 1.5 * photo * (1 - live_hint) * (1.4 if pulldown else 1.0)
+        s["ai_video"] += 1.5 * photo * (1 - live_hint) * (1.4 if dup_pd else 1.0)
         # a talking-head avatar is a fixed frame; a shaking handheld camera argues for a person filming
         moving_cam = RULES["avatar_moving_camera"] if f.get("camera") in ("handheld_like", "smooth_move") else 1.0
         s["avatar"] += 0.6 * photo * (1 if faces > 0.6 else 0.1) * (1.0 if speech else 0.4) * (1 - live_hint) * moving_cam
@@ -454,16 +585,21 @@ def drop_scene_text(layers: list[dict], label: str, vlm_overlay: list | None) ->
     return keep, [t for l in dropped for t in l["texts"][:3]]
 
 
+OVERLAY_KIND_ZH = LangDict({"subtitle": "字幕", "title": "标题", "label": "文字标注", "static_graphic": "图形贴片", "layout_template": "版式模板",
+                            "huazi": "花字", "animated_sticker": "动态贴纸/GIF", "static_sticker": "静态贴纸", "pip": "画中画"},
+                           en={"subtitle": "subtitles", "title": "title", "label": "text labels", "static_graphic": "static graphics", "layout_template": "layout template",
+                               "huazi": "styled text", "animated_sticker": "animated sticker / GIF", "static_sticker": "static sticker", "pip": "picture-in-picture"})
+
+
 def verdict_text(label: str, image_source: str | None, layers: list[dict]) -> str:
     base = LABEL_ZH[label]
     if label in ("static_hold", "still_motion") and image_source and image_source != "unknown":
-        base += f"（{IMAGE_SOURCE_ZH.get(image_source, image_source)}）"
+        base += T("（{s}）", " ({s})", s=IMAGE_SOURCE_ZH.get(image_source, image_source))
     kinds = []
     for l in layers:
-        name = {"subtitle": "字幕", "title": "标题", "label": "文字标注", "static_graphic": "图形贴片", "layout_template": "版式模板",
-                "huazi": "花字", "animated_sticker": "动态贴纸/GIF", "static_sticker": "静态贴纸", "pip": "画中画"}.get(l["kind"], l["kind"])
+        name = OVERLAY_KIND_ZH.get(l["kind"], l["kind"])
         if name not in kinds:
             kinds.append(name)
     if kinds:
-        return f"{base} + 代码/剪辑叠加（{'、'.join(kinds)}）"
+        return T("{base} + 代码/剪辑叠加（{kinds}）", "{base} + code / editor overlays ({kinds})", base=base, kinds=join(kinds))
     return base

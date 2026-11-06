@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
-from .media import VideoInfo, iter_frames
+from .media import VideoInfo, frame_times, iter_frames
 
 THUMB_W = 96
 
@@ -22,8 +22,9 @@ class FrameTrack:
     pix_diff: np.ndarray        # mean |diff| of gray thumbs, 0..1
     changed: np.ndarray         # fraction of thumb pixels that changed noticeably
     luma: np.ndarray            # mean luma 0..255
-    thumbs: list[np.ndarray] = field(repr=False, default_factory=list)  # small gray thumbs (for dissolve check)
+    thumbs: list[np.ndarray] = field(repr=False, default_factory=list)  # small gray thumbs, uint8 (for dissolve check)
     hists: list[np.ndarray] = field(repr=False, default_factory=list)
+    times: np.ndarray | None = field(repr=False, default=None)  # per-frame pts (s) for variable frame rate; None = i / fps
 
     @property
     def n(self) -> int:
@@ -39,24 +40,36 @@ class Shot:
     transition_in: str = "cut"
     boundary_score: float = 0.0
     beats: list[int] = field(default_factory=list)  # frame indices of MG/slide beat changes inside the shot
+    flash_s: float = 0.0  # "flash" transitions: how long the white / grey flash takes to decay
+    times: np.ndarray | None = field(repr=False, default=None)  # FrameTrack.times
+
+    def t(self, frame: int) -> float:
+        """Time of a frame index. Variable-frame-rate video uses the real pts; past the last frame,
+        one median frame interval after it."""
+        if self.times is None:
+            return frame / self.fps
+        if frame < len(self.times):
+            return float(self.times[frame])
+        step = float(np.median(np.diff(self.times))) if len(self.times) > 1 else 1 / self.fps
+        return float(self.times[-1]) + step * (frame - len(self.times) + 1)
 
     @property
     def start(self) -> float:
-        return self.start_frame / self.fps
+        return self.t(self.start_frame)
 
     @property
     def end(self) -> float:
-        return self.end_frame / self.fps
+        return self.t(self.end_frame)
 
     @property
     def duration(self) -> float:
-        return (self.end_frame - self.start_frame) / self.fps
+        return self.end - self.start
 
     def to_dict(self) -> dict:
         return {"index": self.index, "start": round(self.start, 3), "end": round(self.end, 3),
                 "duration": round(self.duration, 3), "start_frame": self.start_frame, "end_frame": self.end_frame,
                 "transition_in": self.transition_in, "boundary_score": round(self.boundary_score, 3),
-                "beats": [round(b / self.fps, 3) for b in self.beats]}
+                "beats": [round(self.t(b), 3) for b in self.beats]} | ({"flash_s": round(self.flash_s, 2)} if self.flash_s else {})
 
 
 def _hist(bgr: np.ndarray) -> np.ndarray:
@@ -83,12 +96,12 @@ def build_track(path: str, info: VideoInfo) -> FrameTrack:
             thr = max(6.0, 0.35 * float(min(g.std(), prev_g.std())))
             chg.append(float((d > thr).mean()))
         luma.append(float(g.mean()))
-        thumbs.append(g)
+        thumbs.append(g.astype(np.uint8))  # lossless (gray of uint8 frames); 4x less memory on long videos
         hists.append(h)
         prev_h, prev_g = h, g
     fps = info.fps if info.fps > 0 else 30.0
     return FrameTrack(fps=fps, hist_dist=np.array(hist_d), pix_diff=np.array(pix_d), changed=np.array(chg), luma=np.array(luma),
-                      thumbs=thumbs, hists=hists)
+                      thumbs=thumbs, hists=hists, times=frame_times(path, len(luma), fps))
 
 
 def _local_median(x: np.ndarray, radius: int) -> np.ndarray:
@@ -121,7 +134,12 @@ def detect_shots(track: FrameTrack, min_shot_s: float = 0.35, cut_threshold: flo
         s = score[i]
         strong = s > cut_threshold and s > base[i] * 2.5 + 0.06 and chg[i] > 0.25
         relative = chg[i] > 0.45 and chg[i] > chg_base[i] * 3 + 0.2 and s > base[i] * 4 + 0.03
-        if strong or relative:
+        # a one-frame swap between two still layouts (slides / MG cards on the same ground): less of the frame
+        # changes, but the colour distribution jumps and the picture before it is digitally frozen (pixel-identical
+        # frames; a filmed screen whose content changes keeps sensor noise, 0.002-0.03, and is not a cut)
+        still_swap = (s > cut_threshold and track.hist_dist[i] > 0.25 and chg[i] > 0.18 and chg_base[i] < 0.01
+                      and s > base[i] * 5 + 0.1 and i >= 3 and float(track.pix_diff[i - 3:i].max()) < 1e-3)
+        if strong or relative or still_swap:
             boundaries[i] = ("cut", float(max(s, chg[i])))
 
     # 2) fades through black / white: luma dips to an extreme and comes back
@@ -133,7 +151,9 @@ def detect_shots(track: FrameTrack, min_shot_s: float = 0.35, cut_threshold: flo
             j = i
             while j < n and dark[j]:
                 j += 1
-            if 0 < i and j < n and (j - i) <= fps * 2.5:
+            # a fade passes through an (almost) uniform frame; a white page with a title on it is a shot, not a fade
+            flat = min(float(track.thumbs[k].std()) for k in range(i, j)) < 4.0
+            if 0 < i and j < n and (j - i) <= fps * 2.5 and flat:
                 # boundary at the last extreme frame (next shot starts after fade-in begins)
                 mid = j
                 if not any(abs(mid - b) < radius for b in boundaries):
@@ -149,7 +169,7 @@ def detect_shots(track: FrameTrack, min_shot_s: float = 0.35, cut_threshold: flo
         for k in sorted({max(2, int(round(fps * 0.12))), max(3, int(round(fps * 0.2))), max(5, int(round(fps * 0.45)))}):
             cand = []
             for i in range(k, n - k):
-                A, B, M = track.thumbs[i - k], track.thumbs[i + k], track.thumbs[i]
+                A, B, M = (track.thumbs[j].astype(np.float32) for j in (i - k, i + k, i))
                 D = B - A
                 thr = max(6.0, 0.35 * float(min(A.std(), B.std())))
                 far = float((np.abs(D) > thr).mean())
@@ -162,7 +182,9 @@ def detect_shots(track: FrameTrack, min_shot_s: float = 0.35, cut_threshold: flo
                 if not 0.2 <= alpha <= 0.8:
                     continue
                 resid = float(np.abs(M - (A + alpha * D)).mean() / (np.abs(D).mean() + 1e-6))
-                if resid < 0.20 and not _motion_explains(A, B):
+                # a cross-fade is a burst of change; an animated gradient / colour morph is a blend of its
+                # neighbours at every frame, at a steady rate, so require more change than in the windows around it
+                if resid < 0.20 and not _steady_morph(track.thumbs, i, k) and not _motion_explains(A, B):
                     cand.append((i, resid, far))
             cand.sort(key=lambda t: t[1])
             for i, resid, far in cand:
@@ -182,13 +204,36 @@ def detect_shots(track: FrameTrack, min_shot_s: float = 0.35, cut_threshold: flo
         if b == n and shots and b - start < min_len:
             shots[-1].end_frame = n
             break
-        shots.append(Shot(index=len(shots) + 1, start_frame=start, end_frame=b, fps=fps, transition_in=trans, boundary_score=bscore))
+        shots.append(Shot(index=len(shots) + 1, start_frame=start, end_frame=b, fps=fps, transition_in=trans, boundary_score=bscore,
+                              times=track.times))
         if b < n:
             trans, bscore = boundaries[b]
         start = b
     for shot in shots:
         shot.beats = [b for b in beat_marks if shot.start_frame + min_len <= b <= shot.end_frame - min_len]
+        if shot.transition_in == "cut":
+            shot.flash_s = _flash(track.luma, shot.start_frame, shot.end_frame, fps)
+            if shot.flash_s:
+                shot.transition_in = "flash"
     return shots
+
+
+def _flash(luma: np.ndarray, start: int, end: int, fps: float) -> float:
+    """A cut that opens on a bright flash decaying into the new shot (a common motion-graphics transition):
+    seconds until the brightness settles, or 0."""
+    if start < 1 or end - start < 3:
+        return 0.0
+    before = float(np.median(luma[max(0, start - 3):start]))
+    settle = float(np.median(luma[start + 1:end][-max(1, min(end - start - 1, int(fps))):]))  # level later in the shot
+    jump = float(luma[start]) - max(before, settle)
+    if jump < 40:
+        return 0.0
+    k = start
+    while k + 1 < end and luma[k + 1] - settle > 0.2 * jump:
+        k += 1
+    if k == start or k - start > fps * 1.5:  # one bright frame is just a bright shot; a long ramp is a fade
+        return 0.0
+    return (k + 1 - start) / fps
 
 
 def _mg_beats(track: FrameTrack, boundaries: dict[int, tuple[str, float]], fps: float) -> list[tuple[int, tuple[str, float]]]:
@@ -213,13 +258,28 @@ def _mg_beats(track: FrameTrack, boundaries: dict[int, tuple[str, float]], fps: 
     for (a0, a1), (b0, b1) in zip(runs, runs[1:]):
         if any(a1 - 1 <= k <= b0 + 1 for k in boundaries):
             continue  # already separated by a detected cut/fade
-        ta, tb = track.thumbs[(a0 + a1) // 2], track.thumbs[(b0 + b1) // 2]
+        ta, tb = (track.thumbs[j].astype(np.float32) for j in ((a0 + a1) // 2, (b0 + b1) // 2))
         thr = max(6.0, 0.35 * float(min(ta.std(), tb.std())))
         frac = float((np.abs(ta - tb) > thr).mean())
         if frac > 0.12:
             # boundary at the start of the transition (end of hold A)
             out.append((a1, ("mg_transition", frac)))
     return out
+
+
+def _steady_morph(thumbs: list[np.ndarray], i: int, k: int) -> bool:
+    """True when the picture changes as fast just before and just after the window [i-k, i+k] as inside it."""
+    n = len(thumbs)
+
+    def rate(a: int, b: int) -> float | None:
+        a, b = max(0, a), min(n - 1, b)
+        if b - a < k:
+            return None
+        return float(np.abs(thumbs[b].astype(np.float32) - thumbs[a].astype(np.float32)).mean()) * (2 * k) / (b - a)
+
+    mid = rate(i - k, i + k)
+    around = [r for r in (rate(i - 3 * k, i - k), rate(i + k, i + 3 * k)) if r is not None]
+    return bool(mid and around and mid < 1.3 * max(around))
 
 
 def _motion_explains(a: np.ndarray, b: np.ndarray) -> bool:

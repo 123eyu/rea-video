@@ -73,3 +73,27 @@ def test_two_of_three_beat_one_confident_model():
     # hard constraints still win: a frozen shot is never a generated video
     frozen = fuse(p(static_hold=0.6), p(ai_video=0.9), "frozen", majority="ai_video")
     assert max(frozen, key=frozen.get) == "static_hold" or frozen["ai_video"] < 0.5
+
+
+def test_split_suggestion_kept_when_valid_and_dropped_when_empty():
+    from rea_video.review import _clean
+
+    ok, err = _clean({"id": "shot_001", "label_probs": {"ai_video": 1.0},
+                      "split_suggestion": {"cuts": [12.5, 40], "labels": ["code_render", "live_action"], "note": "n"}})
+    assert err is None and ok["split_suggestion"]["cuts"] == [12.5, 40.0]
+    assert ok["split_suggestion"]["labels"] == ["code_render", "live_action"]
+    bad, err2 = _clean({"id": "shot_001", "label_probs": {"ai_video": 1.0}, "split_suggestion": {"cuts": []}})
+    assert err2 is None and not bad.get("split_suggestion")
+
+
+def test_split_suggestion_rejects_malformed_input_instead_of_raising():
+    from rea_video.review import _clean
+
+    base = {"id": "shot_001", "label_probs": {"ai_video": 1.0}}
+    for sp in ({"cuts": "12.5"}, {"cuts": ["abc"]}, {"cuts": [1, None]}, {"cuts": [5.0], "labels": "live_action"},
+               {"cuts": [3.0], "labels": ["bogus_label"]}):
+        clean, err = _clean({**base, "split_suggestion": sp})
+        assert clean is None and err and "split_suggestion" in err, sp
+    # cuts come back sorted, labels stay as given
+    ok, err = _clean({**base, "split_suggestion": {"cuts": [40, 12.5], "labels": ["code_render", "live_action", "code_render"]}})
+    assert err is None and ok["split_suggestion"]["cuts"] == [12.5, 40.0]

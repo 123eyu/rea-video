@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 交流讨论
+    url: https://linux.do/
+    about: 使用体验、拆解案例和复刻思路，欢迎到 linux.do 聊。

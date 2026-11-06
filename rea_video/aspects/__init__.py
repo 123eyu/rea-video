@@ -8,6 +8,8 @@ from __future__ import annotations
 import html
 import json
 
+from ..i18n import T, semi
+
 from . import framing, camera, lighting, grade, editing, fmt  # noqa: F401  (registration order matters)
 from .base import FILMED, PHOTOGRAPHIC, REGISTRY, ShotCtx, get
 from .subject import subject
@@ -58,7 +60,7 @@ def review_guide() -> str:
     lines = []
     for a in REGISTRY:
         for f in a.shot_fields:
-            lines.append(f"  {a.key}.{f.key}（{f.zh}）：{f.question}")
+            lines.append(T("  {a}.{f}（{l}）：{q}", "  {a}.{f} ({l}): {q}", a=a.key, f=f.key, l=f.zh, q=f.question))
     return "\n".join(lines)
 
 
@@ -106,14 +108,15 @@ def shooting_plan(b: dict) -> dict:
     fr, cam, li, ed, fo = (A.get(k) or {} for k in ("framing", "camera", "lighting", "editing", "format"))
     steps = []
     if fo:
-        steps.append(f"形式：{fo['lines'][0].split('：', 1)[1].split('（')[0]}")
+        steps.append(T("形式：{f}", "Format: {f}", f=fmt.FORMAT_ZH[fo["result"]["format"]].split("（")[0].split(" (")[0]))
     if fr.get("result", {}).get("shot_size"):
-        steps.append(f"取景：以{fr['result']['shot_size']}为主" + (f"，{fr['result']['camera_angle']}" if fr["result"].get("camera_angle") else ""))
+        steps.append(T("取景：以{s}为主", "Framing: mostly {s}", s=fr["result"]["shot_size"])
+                     + (T("，{a}", ", {a}", a=fr["result"]["camera_angle"]) if fr["result"].get("camera_angle") else ""))
     if cam.get("lines"):
         steps.append(cam["lines"][0])
     st = li.get("setup") or {}
     if st:
-        steps.append(f"布光：{st['name']}——{st['detail']}")
+        steps.append(T("布光：{n}——{d}", "Lighting: {n} — {d}", n=st["name"], d=st["detail"]))
     if ed.get("lines"):
         steps.append(ed["lines"][0])
     return {"steps": steps, "gear": st.get("gear", [])}
@@ -141,22 +144,23 @@ def shot_text(r: dict) -> str:
     asp = r.get("aspects") or {}
     fr, cam, li = ((asp.get(k) or {}).get("result") or {} for k in ("framing", "camera", "lighting"))
     parts = [fr.get("shot_size"), fr.get("camera_angle"), cam.get("support_zh"),
-             li.get("setup_name"), li.get("key_direction") and f"主光{li['key_direction']}", li.get("ratio") and f"光比{li['ratio']}",
-             li.get("quality")]
-    return "；".join(p for p in parts if p)
+             li.get("setup_name"), li.get("key_direction") and T("主光{k}", "key light {k}", k=li["key_direction"]),
+             li.get("ratio") and T("光比{r}", "lighting ratio {r}", r=li["ratio"]), li.get("quality")]
+    return semi().join(p for p in parts if p)
 
 
 # ---------------------------------------------------------------- report -----------------------------------------
 
 def _src(row: dict) -> str:
+    """Who said what. A source that agrees with the verdict is named only; one that differs shows its own value."""
+    final = str(row.get("final", "")).strip()
     bits = []
-    if row.get("measured") not in (None, ""):
-        bits.append(f"测量：{row['measured']}")
-    if row.get("vlm"):
-        bits.append(f"VLM：{row['vlm']}")
-    if row.get("agent"):
-        bits.append(f"看图：{row['agent']}")
-    return "；".join(bits)
+    for key, name in (("measured", T("测量", "measured")), ("vlm", "VLM"), ("agent", T("看图", "agent review"))):
+        v = row.get(key)
+        if v in (None, ""):
+            continue
+        bits.append(name if str(v).strip() == final else f"{name}{T('：', ': ')}{v}")
+    return semi().join(bits)
 
 
 def report_md(b: dict) -> list[str]:
@@ -164,22 +168,27 @@ def report_md(b: dict) -> list[str]:
     if not any(A.get(a.key) for a in REGISTRY):
         return []
     li = A.get("lighting") or {}
-    L = ["", "## 拍法、打光与剪辑", ""]
+    L = ["", T("## 拍法、打光与剪辑", "## Camera, lighting and editing"), ""]
     L += [f"- {x}" for x in summary_lines(b)]
     plan = b.get("shooting_plan") or {}
     if plan:
-        L += ["", "**复刻拍摄方案**", ""] + [f"{i}. {s}" for i, s in enumerate(plan["steps"], 1)]
+        L += ["", T("**复刻拍摄方案**", "**Shooting plan for the remake**"), ""] + [f"{i}. {s}" for i, s in enumerate(plan["steps"], 1)]
         if plan.get("gear"):
-            L += ["", "器材："] + [f"- {g}" for g in plan["gear"]]
+            L += ["", T("器材：", "Gear:")] + [f"- {g}" for g in plan["gear"]]
         if (li.get("setup") or {}).get("notes"):
-            L += [f"- 注意：{n}" for n in li["setup"]["notes"]]
+            L += [T("- 注意：{n}", "- Note: {n}", n=n) for n in li["setup"]["notes"]]
     rows = [(a, r) for a in REGISTRY for r in (A.get(a.key) or {}).get("fields", [])]
     if rows:
-        L += ["", "| 维度 | 项目 | 结论 | 来源 |", "|---|---|---|---|"]
+        L += ["", f"<details><summary>{html.escape(T('逐项测量与看图结果（{n} 项）', 'Per-item measurements and image readings ({n})', n=len(rows)))}</summary>", "",
+              T("| 维度 | 项目 | 结论 | 来源 |", "| Aspect | Item | Verdict | Sources |"), "|---|---|---|---|"]
         for a, r in rows:
             L.append(f"| {a.title} | {r['zh']} | {str(r['final']).replace('|', '/')} | {_src(r).replace('|', '/')} |")
-    L += ["", "- 说明：光比、软硬、色温、景别由主体像素测得（有人脸用人脸，没有用画面清晰区域，后者是估算）；平台转码会压暗部，软硬和补光偏保守；"
-              "机位角度、光源种类、眼神光、轮廓光以看图结果为准。测量和看图不一致时两者都列出。"]
+        L += ["", "</details>"]
+    L += ["", T("- 说明：光比、软硬、色温、景别由主体像素测得（有人脸用人脸，没有用画面清晰区域，后者是估算）；平台转码会压暗部，软硬和补光偏保守；"
+                "机位角度、光源种类、眼神光、轮廓光以看图结果为准。测量和看图不一致时两者都列出。",
+                "- Note: lighting ratio, soft / hard, colour temperature and shot size are measured on the subject's pixels (the face when there is one, "
+                "otherwise the in-focus region, which is an estimate); platform transcodes crush the shadows, so hardness and fill read conservative; "
+                "camera angle, light source, catchlight and rim light follow the image readers. Where measurement and readers disagree, both are listed.")]
     return L
 
 
@@ -192,9 +201,9 @@ def report_html(b: dict) -> str:
     plan = b.get("shooting_plan") or {}
     plan_html = ""
     if plan:
-        plan_html = ("<h4>复刻拍摄方案</h4><ol>" + "".join(f"<li>{esc(s)}</li>" for s in plan["steps"]) + "</ol>"
-                     + ("<h4>器材</h4><ul>" + "".join(f"<li>{esc(g)}</li>" for g in plan.get("gear", [])) + "</ul>" if plan.get("gear") else ""))
+        plan_html = (f"<h4>{T('复刻拍摄方案', 'Shooting plan for the remake')}</h4><ol>" + "".join(f"<li>{esc(s)}</li>" for s in plan["steps"]) + "</ol>"
+                     + (f"<h4>{T('器材', 'Gear')}</h4><ul>" + "".join(f"<li>{esc(g)}</li>" for g in plan.get("gear", [])) + "</ul>" if plan.get("gear") else ""))
     rows = "".join(f"<tr><td>{esc(a.title)}</td><td>{esc(r['zh'])}</td><td>{esc(str(r['final']))}</td><td class='muted'>{esc(_src(r))}</td></tr>"
                    for a in REGISTRY for r in (A.get(a.key) or {}).get("fields", []))
     table = f"<table style='width:100%;font-size:13px;border-collapse:collapse'>{rows}</table>" if rows else ""
-    return f"<section class='shot'><h3 style='margin:4px 0'>拍法、打光与剪辑</h3><ul>{items}</ul>{plan_html}{table}</section>"
+    return f"<section class='shot'><h3 style='margin:4px 0'>{T('拍法、打光与剪辑', 'Camera, lighting and editing')}</h3><ul>{items}</ul>{plan_html}{table}</section>"

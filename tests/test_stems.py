@@ -29,13 +29,14 @@ def test_ensure_model_rejects_partial_download_and_leaves_no_temp(tmp_path, monk
 def test_ensure_model_uses_unique_temp_names(tmp_path, monkeypatch):
     monkeypatch.setenv("REA_VIDEO_MODELS", str(tmp_path))
     seen = []
+    monkeypatch.setattr(S, "MODEL_SHA256", __import__("hashlib").sha256(b"model").hexdigest())
 
     def fake(url, dst):
         seen.append(dst.name)
         with open(dst, "wb") as f:
-            f.truncate(S.MODEL_BYTES)
+            f.write(b"model")
 
     monkeypatch.setattr(S.urllib.request, "urlretrieve", fake)
     S.ensure_model(force=True)
     S.ensure_model(force=True)
-    assert len(set(seen)) == 2 and (tmp_path / S.MODEL_NAME).stat().st_size == S.MODEL_BYTES
+    assert len(set(seen)) == 2 and (tmp_path / S.MODEL_NAME).read_bytes() == b"model"

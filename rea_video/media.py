@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
@@ -80,6 +81,11 @@ class VideoInfo:
     raw: dict
 
     @property
+    def display_size(self) -> tuple[int, int]:
+        """(width, height) as shown, after rotation metadata."""
+        return (self.height, self.width) if self.rotation in (90, 270) else (self.width, self.height)
+
+    @property
     def aspect_ratio(self) -> str:
         w, h = (self.height, self.width) if self.rotation in (90, 270) else (self.width, self.height)
         if not w or not h:
@@ -133,6 +139,26 @@ def scaled_size(info: VideoInfo, width: int) -> tuple[int, int]:
     return width, max(2, height)
 
 
+def frame_times(path: str | Path, n: int, fps: float) -> np.ndarray | None:
+    """Real timestamps (s, from 0) of the n frames iter_frames passes through, read from packet pts
+    (no decoding). None when they match frame / fps to within half a frame (constant frame rate; the
+    caller keeps index / fps) or when the packet count does not line up with the decoded frames."""
+    if n < 2 or fps <= 0:
+        return None
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time",
+                              "-of", "csv=p=0", str(path)], capture_output=True, text=True, timeout=120).stdout
+        pts = sorted(float(x.strip().rstrip(",")) for x in out.split() if x.strip().rstrip(",") not in ("", "N/A"))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    if len(pts) != n:
+        return None
+    t = np.asarray(pts) - pts[0]
+    if np.max(np.abs(t - np.arange(n) / fps)) <= 0.5 / fps:
+        return None
+    return t
+
+
 def iter_frames(
     path: str | Path,
     info: VideoInfo,
@@ -168,7 +194,10 @@ def iter_frames(
     pix = "gray" if gray else "bgr24"
     cmd += ["-an", "-sn", "-vf", ",".join(vf), *([] if fps else passthrough_args()), "-f", "rawvideo", "-pix_fmt", pix, "-"]
     frame_bytes = w * h * (1 if gray else 3)
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # stderr goes to a temp file: an unread PIPE fills up (~64 KB of decode errors on a damaged file) and
+    # ffmpeg blocks, so stdout stalls forever
+    errf = tempfile.TemporaryFile()
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=errf)
     assert proc.stdout is not None
     count = 0
     try:
@@ -180,21 +209,28 @@ def iter_frames(
             count += 1
             yield arr.reshape((h, w)) if gray else arr.reshape((h, w, 3))
         if count == 0:
-            err = proc.stderr.read().decode(errors="ignore") if proc.stderr else ""
+            proc.wait()
+            errf.seek(0)
+            err = errf.read()[-4000:].decode(errors="ignore")
             if err.strip():
                 raise MediaError(f"ffmpeg decoded no frames: {err.strip()[:300]}")
     finally:
         proc.stdout.close()
         proc.kill()
         proc.wait()
+        errf.close()
 
 
 def extract_frame(path: str | Path, t: float, out_path: str | Path, width: int | None = None) -> Path:
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     vf = ["-vf", f"scale={width}:-2"] if width else []
+    out_path.unlink(missing_ok=True)
     cmd = ["ffmpeg", "-v", "error", "-y", "-ss", f"{max(t, 0):.4f}", "-i", str(path), "-frames:v", "1", *vf, "-q:v", "2", str(out_path)]
-    subprocess.run(cmd, check=True)
+    if subprocess.run(cmd, capture_output=True).returncode != 0 or not out_path.is_file():
+        # t past the last frame's timestamp (low fps, last shot): take the file's last frame instead
+        cmd = ["ffmpeg", "-v", "error", "-y", "-sseof", "-3", "-i", str(path), "-update", "1", *vf, "-q:v", "2", str(out_path)]
+        subprocess.run(cmd, check=True, capture_output=True)
     return out_path
 
 

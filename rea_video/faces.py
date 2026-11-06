@@ -13,10 +13,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from .util import sha256_file
+
 LOG = logging.getLogger(__name__)
 MODEL_NAME = "face_detection_yunet_2023mar.onnx"
-MODEL_URL = f"https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/{MODEL_NAME}"
-MODEL_BYTES = 232_589
+# 固定到 commit，并校验 sha256：防止上游或中间人替换模型
+MODEL_URL = f"https://github.com/opencv/opencv_zoo/raw/f12e12798e8314f7c074a6656816c048dcc95b7a/models/face_detection_yunet/{MODEL_NAME}"
+MODEL_SHA256 = "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
 MIN_AREA = 0.02  # a face must cover >= 2% of the frame to count
 
 _DET = None  # cv2.FaceDetectorYN | "haar" cascade | False (unavailable)
@@ -28,15 +31,15 @@ def _models_dir() -> Path:
 
 def _ensure_model() -> Path | None:
     p = _models_dir() / MODEL_NAME
-    if p.is_file() and p.stat().st_size == MODEL_BYTES:
+    if p.is_file() and sha256_file(p) == MODEL_SHA256:
         return p
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_name(f"{p.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.part")
     try:
         LOG.info("downloading face model %s -> %s", MODEL_NAME, p)
         urllib.request.urlretrieve(MODEL_URL, tmp)
-        if tmp.stat().st_size != MODEL_BYTES:
-            raise OSError(f"incomplete download: {tmp.stat().st_size} bytes")
+        if sha256_file(tmp) != MODEL_SHA256:
+            raise OSError("checksum mismatch")
         tmp.replace(p)
         return p
     except Exception as exc:  # offline: fall back to Haar if this OpenCV has it

@@ -2,203 +2,231 @@
 
 # rea-video
 
-逆向一切视频。
+Reverse-engineer any video.
 
-实拍口播、桌拍、AI 视频、3D、代码动效、混剪都能拆，<br>
-逐个镜头告诉你画面、花字、剪辑和声音是怎么做的，再告诉你怎么照着做一条。
+Talking-head, tabletop, AI video, 3D, motion graphics, mixed edits: give it any of them,<br>
+and it tells you shot by shot how the visuals, styled text, editing and audio were made, then gives you a plan to make one yourself.
 
-中文 | [English](README_en.md) | [日本語](README_ja.md)
+[中文](i18n/README_zh.md) | English | [Русский](i18n/README_ru.md) | [日本語](i18n/README_ja.md) | [한국어](i18n/README_ko.md) | [Español](i18n/README_es.md) | [Português](i18n/README_pt.md) | [Français](i18n/README_fr.md) | [Deutsch](i18n/README_de.md)
 
 [![Stars](https://img.shields.io/github/stars/JuneYaooo/rea-video?style=flat)](https://github.com/JuneYaooo/rea-video/stargazers)
 ![Python](https://img.shields.io/badge/python-%E2%89%A53.10-blue)
 ![Agent](https://img.shields.io/badge/runs%20in-Claude%20Code%20%7C%20Codex-8A2BE2)
 
-<img src="docs/cases/demo.gif" width="440" alt="左：TikTok 手机实拍原片；右：别人用 AI 换产品重做的版本">
+<img src="docs/cases/demo.gif" width="440" alt="Left: TikTok original shot on a phone; right: someone's AI remake with a different product">
 
-左边是 TikTok 上的手机实拍原片，右边是别人用 AI 换了产品重做的版本。<br>
-rea-video 判断：左边全部实拍，一个场景、两个机位就能拍完；右边全部 AI 生成，8 个镜头可以合并成 3 次生成。
+Left: a TikTok ad shot on a phone. Right: someone's AI remake with a different product swapped in.<br>
+rea-video's verdict: the left is all live footage, one set and two camera positions; the right is all AI-generated, and its 8 shots can be produced in 3 generations.
 
 </div>
 
-## 能拆哪些视频
+> Reports come out in the language you ask in (Chinese or English; your agent passes `--lang`). The detailed docs are in Chinese for now; your agent reads them and answers in your language. The six example reports below are in English, so you can see what a report looks like without installing anything.
 
-| 视频类型 | 常见例子 | 拆出什么 |
+## What it can break down
+
+| Video type | Examples | What you get |
 |---|---|---|
-| 实拍 | 口播、桌拍、手持带货、vlog、探店 | 拍摄场次和机位，景别、运镜、布光（12 种方案附器材）、调色 |
-| AI 视频 | 文生 / 图生视频、AI 短剧、AI MV | 判断依据，每镜反推的提示词，合并成几次生成、用哪个模型 |
-| 数字人 | 人像被声音驱动说话、对口型 | 哪些镜头是数字人，需要的人像和音频 |
-| 3D / 动画 | Blender / C4D 科普、产品动画、2D 动画、定格动画 | 用视频模型生成还是写 3D 代码渲染 |
-| 代码 / 模板 | 文字动效、UI 演示、图表、PPT 式卡片 | 文字、版式、动效节奏，可以写成 Remotion 工程 |
-| 录屏 / 截图 | 软件教程、网页演示 | 哪些是真实素材，复刻时要你自己录 |
-| 混合 / 混剪 | AI 人物 + 代码界面 + 真实录屏，实拍 + AI 加工 | 每一镜分开判断，再按原时间线拼回 |
+| Live footage | Talking-head, tabletop, handheld product demo, vlog, store visit | Setups and camera positions, framing, camera moves, lighting (12 setups with gear lists), color grade |
+| AI video | Text/image-to-video, AI short drama, AI music video | Evidence, a reverse-engineered prompt per shot, how to batch into generations and which model to use |
+| Avatar | A portrait driven by audio, lip-sync | Which shots are avatar shots, what portrait and audio you need |
+| 3D / animation | Blender / C4D explainers, product animation, 2D animation, stop-motion | Whether to generate with a video model or render from 3D code |
+| Code / template | Kinetic type, UI demos, charts, slide-style cards | Text, layout and motion timing, ready to rebuild as a Remotion project |
+| Screen recording | Software tutorials, web demos | Which parts are real material you'll need to record yourself |
+| Mixed / edits | AI characters + code UI + real screen capture; live footage with AI edits | Each shot judged separately, then reassembled on the original timeline |
 
-除了画面怎么做的，每条视频还会拆：
+Besides how the picture was made, every video also gets:
 
-- 字幕和花字：每句字幕的起止时间（可导出 SRT / ASS），花字用什么颜色、描边、怎么出场
-- 贴纸、表情包、画中画：放在哪、停多久
-- 剪辑：在哪切、节奏多快、有没有卡节拍
-- 声音：真人还是 AI 配音，配乐是 AI 做的还是曲库的、多少 BPM，音效落在哪一下
-- 要你自己准备的素材：录屏、截图、产品图
+- Captions and styled text: start and end of each line (exports to SRT / ASS), plus color, outline and how the text comes in
+- Stickers, emoji, picture-in-picture: where they sit and how long they stay
+- Editing: where the cuts are, how fast, whether they hit the beat
+- Audio: human or AI voice, AI or library music and its BPM, where each sound effect lands
+- Material you'll supply yourself: screen recordings, screenshots, product photos
 
-## 快速开始
+## Quick start
 
-rea-video 是给 AI 助手用的。在 Claude Code、Codex 这类能运行命令的 agent 里说：
+rea-video is built for AI agents. In Claude Code, Codex or any agent that can run commands, say:
 
 ```text
-安装 https://github.com/JuneYaooo/rea-video ，然后拆解这条视频：/path/to/video.mp4
+Install https://github.com/JuneYaooo/rea-video, then break down this video: /path/to/video.mp4
 ```
 
-agent 会自己装好命令行工具、读完拆解流程，然后从头跑完。电脑上需要有 ffmpeg 和 Python 3.10 以上。
+The agent installs the CLI, learns the workflow and runs the whole thing. You need ffmpeg and Python 3.10+.
 
-跑完你会拿到：
+<details><summary>Install by hand</summary>
 
-- 一句话结论，比如「AI 视频 41% + 代码界面 59%，有 8 秒真实录屏，曲库配乐 122 BPM」
-- 复刻方案，按实拍、AI 生成、代码分开写
-- 完整报告 `report.html`：逐镜头截图、判断依据、提示词、拍法和声音拆解
+```bash
+brew install ffmpeg            # or: sudo apt install ffmpeg
+git clone https://github.com/JuneYaooo/rea-video && cd rea-video
+bash scripts/install_skill.sh  # installs the CLI (pip, or pipx / a local .venv if pip is blocked) and links the skill into ~/.claude, ~/.codex, ~/.agents
+rea-video --help
+```
 
-配一个看视频的模型，Gemini 豆包都行，把接口地址和密钥告诉 agent 就行。配上之后实拍、AI、3D 分得更准，每个镜头还会反推出提示词。不配也能用，agent 自己能看图的话，会补看没把握的镜头。
+</details>
 
-## 案例
+You get:
+
+- a one-line summary, e.g. "41% AI video + 59% code UI, 8 s of real screen recording, library music at 122 BPM"
+- a remake plan, split into what to film, what to generate and what to code
+- a full `report.html` with per-shot frames, evidence, prompts, camera and lighting notes, and the audio breakdown
+
+Add a video-capable model — Gemini or Doubao both work: give the agent the endpoint and key. It makes live/AI/3D calls more accurate and writes a reverse-engineered prompt for every shot. Without one it still works; if your agent can see images, it will check the uncertain shots itself.
+
+## Examples
+
+The sample videos in `docs/cases/videos/` are re-compressed to keep the repo small, which strips the TikTok / Douyin platform tags. Running them yourself gives different results from the reports below, especially without a vision model. Use the original platform download to reproduce.
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<a href="docs/cases.md#2-混合片ai-人物对话--代码界面--真实录屏"><img src="docs/cases/dual_role/storyboard.jpg"></a><br>
-<b>混合片</b> · 19 秒 · 10 镜<br>
-AI 人物对话 + 代码界面 + 8 秒真实录屏。5 个对话镜头被界面隔开，但同一个场景，一次生成就够。<br>
-<a href="docs/cases/videos/dual_role.mp4">视频</a> · <a href="docs/cases/dual_role/report.md">报告</a>
+<a href="docs/cases.md#2-混合片ai-人物对话--代码界面--真实录屏"><img src="docs/cases/dual_role/thumb.jpg"></a><br>
+<b>Mixed-media clip</b> · 19 s · 10 shots<br>
+AI characters talking + code-built UI + 8 s of real screen recording. The 5 dialogue shots are split up by UI segments but share one set, so one generation covers them.<br>
+<a href="docs/cases/videos/dual_role.mp4">Video</a> · <a href="docs/cases/dual_role/report_en.md">Report</a>
 </td>
 <td width="50%" valign="top">
-<a href="docs/cases.md#3-3d-科普片咸鸭蛋为什么会流油"><img src="docs/cases/salted_egg/storyboard.jpg"></a><br>
-<b>3D 科普片</b> · 67 秒 · 21 镜<br>
-全部 3D 渲染，AI 旁白。可以合并成 10 次视频生成，也可以让大模型写 Blender / Three.js 代码。<br>
-<a href="docs/cases/videos/salted_egg.mp4">视频</a> · <a href="docs/cases/salted_egg/report.md">报告</a>
+<a href="docs/cases.md#3-3d-科普片咸鸭蛋为什么会流油"><img src="docs/cases/salted_egg/thumb.jpg"></a><br>
+<b>3D explainer</b> · 67 s · 21 shots<br>
+All 3D, AI narration. Doable as 10 video generations, or have an LLM write Blender / Three.js code.<br>
+<a href="docs/cases/videos/salted_egg.mp4">Video</a> · <a href="docs/cases/salted_egg/report_en.md">Report</a>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<a href="docs/cases.md#4-代码-ui-动效产品宣传片"><img src="docs/cases/v10/storyboard.jpg"></a><br>
-<b>产品宣传片</b> · 70 秒 · 12 镜<br>
-83% 是代码动效，12% 录屏。不需要视频模型，写一个 Remotion 工程就能做。<br>
-<a href="docs/cases/videos/v10_oiioii_gen_coding_first.mp4">视频</a> · <a href="docs/cases/v10/report.md">报告</a>
+<a href="docs/cases.md#4-代码-ui-动效产品宣传片"><img src="docs/cases/v10/thumb.jpg"></a><br>
+<b>Product promo</b> · 70 s · 12 shots<br>
+83% code-driven motion graphics, 12% screen recording. No video model needed; one Remotion project does it.<br>
+<a href="docs/cases/videos/v10_oiioii_gen_coding_first.mp4">Video</a> · <a href="docs/cases/v10/report_en.md">Report</a>
 </td>
 <td width="50%" valign="top">
-<a href="docs/cases.md#5-ai-音乐-mv歌是-ai-写的还是曲库的"><img src="docs/cases/qing_mv/preview.jpg"></a><br>
-<b>AI 音乐 MV</b> · 165 秒 · 86 镜<br>
-判出歌是 AI 生成的（实际是 Suno）。看图模型说是「影视剧实拍」的镜头，agent 从奏折上的伪汉字认出是 AI。<br>
-<a href="docs/cases/videos/qing_mv.mp4">视频</a> · <a href="docs/cases/qing_mv/report.md">报告</a>
+<a href="docs/cases.md#5-ai-音乐-mv歌是-ai-写的还是曲库的"><img src="docs/cases/qing_mv/thumb.jpg"></a><br>
+<b>AI music video</b> · 165 s · 86 shots<br>
+Correctly flags the song as AI-generated (it was made with Suno). The vision model called some shots "live-action drama"; the agent spotted fake Chinese characters on a scroll and ruled them AI.<br>
+<a href="docs/cases/videos/qing_mv.mp4">Video</a> · <a href="docs/cases/qing_mv/report_en.md">Report</a>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/cases.md#6-实拍带货沉浸式开箱"><img src="docs/cases/unboxing/thumb.jpg"></a><br>
+<b>Live-action unboxing</b> · 72 s · 29 shots<br>
+All real footage: an overhead phone rig, one rug, one camera position, no voice-over, room sound plus library BGM. After platform transcoding the offline tool called 35% of it AI; agent review brought it to 97% live-action.<br>
+<a href="docs/cases/videos/unboxing.mp4">Video</a> · <a href="docs/cases/unboxing/report_en.md">Report</a>
+</td>
+<td width="50%" valign="top">
+<a href="docs/cases.md#7-ai-与真人混合用自己的出镜视频生成带货片"><img src="docs/cases/ai_daihuo/thumb.jpg"></a><br>
+<b>AI + real person hybrid</b> · 58 s · 21 shots<br>
+75% real (talking head + filming a phone screen) and 25% AI: the creator fed her own on-camera clip and two product photos to Jimeng to generate a "real-person" product segment. The AI part was caught by the Jimeng watermark and garbled text on the gift box.<br>
+<a href="docs/cases/videos/ai_daihuo.mp4">Video</a> · <a href="docs/cases/ai_daihuo/report_en.md">Report</a>
 </td>
 </tr>
 </table>
 
-## 复刻效果
+## Remakes
 
-rea-video 拆完，交给 [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) 的复刻配方生成：运镜、动作、节奏、转场跟着原片走，只换你指定的元素。
-目前的效果是用自己部署的 MiniMax H3 生成的：原镜头当动作参考，换好元素的关键帧（gpt-image-2）定长相和场景。
-下面是公众号文章里 OiiOii 做过的三组复刻，每组我们做了两版：和 OiiOii 同样的换法，以及把主体、场景、道具一起换掉。
-每个动图里四格同步播放：原片、OiiOii 复刻、我们的复刻、换元素版。
+After rea-video breaks a video down, the remake recipe in [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) generates a new version: camera, motion, pacing and transitions follow the original, only the elements you choose are swapped.
+These results were generated with a self-hosted MiniMax H3: the original shot is the motion reference, and keyframes with the swapped elements (gpt-image-2) set the look.
+Below are three remakes that OiiOii showed in its WeChat articles. For each we made two versions: the same swap as OiiOii, and one that also swaps the subject, setting and props.
+Each GIF plays four versions in sync: original, OiiOii remake, our remake, element-swap version.
 
 <table>
 <tr><td>
-<b>俯拍换装</b> · 12 秒<br>
-同款：女生换成男生，三套衣服换成对应男装。换元素：古风少女、三套汉服、中式书房，遥控器换成团扇。<br>
+<b>Overhead outfit change</b> · 12 s<br>
+Same swap: woman → man, three outfits → matching menswear. Element swap: a girl in three historical Hanfu outfits in a Chinese study; the remote becomes a round fan.<br>
 <img src="docs/cases/remake/outfit.gif"><br>
-<a href="docs/cases/remake/outfit_compare.mp4">高清对比视频（带声音）</a> · <a href="docs/cases/remake/outfit_sheet.jpg">同一时刻抽帧</a>
+<a href="docs/cases/remake/outfit_compare.mp4">HD comparison video (with audio)</a> · <a href="docs/cases/remake/outfit_sheet.jpg">same-moment stills</a>
 </td></tr>
 <tr><td>
-<b>纸艺 / 水彩动画</b> · 30 秒<br>
-同款：主角换成黏土小女孩。换元素：主角换成小狐狸，森林换成海底，云端换成星空，晚霞换成极光。<br>
+<b>Paper-craft / watercolor animation</b> · 30 s<br>
+Same swap: new clay girl as the lead. Element swap: a fox; forest → coral reef, clouds → starry sky, sunset → aurora.<br>
 <img src="docs/cases/remake/paper.gif"><br>
-<a href="docs/cases/remake/paper_compare.mp4">高清对比视频（带声音）</a> · <a href="docs/cases/remake/paper_sheet.jpg">同一时刻抽帧</a>
+<a href="docs/cases/remake/paper_compare.mp4">HD comparison video (with audio)</a> · <a href="docs/cases/remake/paper_sheet.jpg">same-moment stills</a>
 </td></tr>
 <tr><td>
-<b>实拍带货</b> · 21 秒 · 11 镜<br>
-同款：产品换成原创新款，英文贴字换成中文。换元素：樱花粉产品，厨房换成户外露营，食材换成草莓、燕麦奶、猕猴桃。<br>
+<b>Handheld product video</b> · 21 s · 11 shots<br>
+Same swap: an original new product, English sticker → Chinese caption. Element swap: pink product, kitchen → camping table, new ingredients.<br>
 <img src="docs/cases/remake/juicer.gif"><br>
-<a href="docs/cases/remake/juicer_compare.mp4">高清对比视频（带声音）</a> · <a href="docs/cases/remake/juicer_sheet.jpg">同一时刻抽帧</a>
+<a href="docs/cases/remake/juicer_compare.mp4">HD comparison video (with audio)</a> · <a href="docs/cases/remake/juicer_sheet.jpg">same-moment stills</a>
 </td></tr>
 </table>
 
-高清对比视频的声音用原片。原片和 OiiOii 版取自公众号文章，仅用于对比展示。
+The HD comparison videos use the original audio. The originals and OiiOii versions come from the articles and are shown for comparison only.
 
-## 准不准
+## Accuracy
 
-按镜头时长算的「制作方式」准确率：
+How-it-was-made accuracy, weighted by shot duration:
 
-| | 调参集（15 条） | 留出集（16 条） | 公众号转码视频（10 条） |
+| | Tuning set (15) | Holdout (16) | Re-encoded WeChat videos (10) |
 |---|---|---|---|
-| 只用工具（离线、免费） | 98.3% | 99.6% / 98.9% | 88.6% |
-| + 看图模型（Gemini） | — | 99.6% / 99.8% | 99.6% |
-| + agent 看图复核 | — | 99.6% / 99.8% | 100% |
+| Tools only (offline, free) | 98.3% | 99.6% / 98.9% | 88.6% |
+| + vision model (Gemini) | — | 99.6% / 99.8% | 99.6% |
+| + agent visual review | — | 99.6% / 99.8% | 100% |
 
-原始文件只用工具基本够。从平台下载的视频压缩过，噪点证据没了，要靠看图才能回到 99% 以上。真实素材识别 97–99%，镜头切点全对。明细和复现方法在 [eval/RESULTS.md](eval/RESULTS.md)。
+The two holdout numbers are holdout (9 videos) and holdout2 (7 videos).
 
-## 怎么判断的
+On original files the tools alone are mostly enough. Videos downloaded from platforms have been recompressed, which wipes out the noise evidence, so it takes a vision check to get back above 99%.
 
-![rea-video 流程](docs/rea-flow.svg)
+Real-asset detection is 97–99%, and shot boundaries are all correct. Numbers and how to reproduce them: [eval/RESULTS.md](eval/RESULTS.md).
 
-1. 切镜头：把视频按镜头切开，声音拆成人声、配乐、音效。
-2. 取证据：测画面（帧率规律、噪点、是不是整张图在推拉、文件里有没有 AIGC 标识）；看图（手指、文字、物理细节对不对）；听声音（BPM、调性、是唱还是说）。
-3. 综合判断：AIGC 标识、帧率这类硬证据优先于「看起来像」。几方意见冲突时标出来，交给 agent 看图复核。
-4. 出复刻方案：按目标视频模型的实际能力分批，比如单次能生成多长、能不能一次出多个镜头、能吃几张参考图。
+## How it works
 
-## 常见问题
+![rea-video pipeline](docs/rea-flow_en.svg)
+
+1. Split: cut the video into shots and separate audio into voice, music and effects.
+2. Gather evidence: measure the frames (frame cadence, sensor noise, whether the whole image is panning as one plane, AIGC tags in metadata); look at the images (hands, text, physics); listen (BPM, key, singing vs speech).
+3. Decide: hard evidence like AIGC tags and frame cadence outranks "looks like". Conflicts are flagged for the agent to review visually.
+4. Plan the remake: batch shots according to what the target video model can actually do, such as max clip length, multi-shot support and how many reference images it takes.
+
+## FAQ
 
 <details>
-<summary>和 Hypit 这类一键复刻工具有什么区别？</summary>
+<summary>How is this different from one-click remake tools like Hypit?</summary>
 
-[Hypit](https://github.com/hypit-ai/hypit) 拿一条参考视频直接做一条新片：agent 看抽帧理解原片，再用它接入的模型（Seedance、PixVerse、MiniMax、Wan 等）生成画面，字幕和动效用 HTML 渲染出来。
+[Hypit](https://github.com/hypit-ai/hypit) takes a reference video and makes a new one: the agent reads frame grids to understand the original, generates footage with the models it supports (Seedance, PixVerse, MiniMax, Wan and others), and renders captions and motion graphics in HTML.
 
-它不区分原片是怎么做的。原片是实拍的，它照样按自己的流程重做，不会告诉你原片几个机位、怎么打光。AI 视频能做到什么程度，取决于它接了哪些模型：没有可灵、Veo，也没有专门的数字人和 3D；不生成 AI 配乐，配乐要自己准备。它最顺手的是口播、播客、采访这类跟着台词走的视频，纯音乐卡点、产品动效、电影感短片要弱一些。
+It doesn't ask how the original was made. A live-action source goes through the same pipeline; it won't tell you how many cameras were used or how it was lit. What AI video it can match depends on the models it has: no Kling or Veo, and no dedicated avatar or 3D path, and no AI music: you bring your own. It is strongest on talking-head, podcast and interview videos that follow a script, and weaker on music-driven edits, product motion graphics and cinematic shorts.
 
-rea-video 不直接出片。它先逐个镜头判断是拍的、AI 生成的还是代码做的，再分别给拍摄方案、提示词或代码思路。想马上做一条同款，用 Hypit 更快；想弄清原片怎么做、怎么少花钱做出来，用 rea-video。两个可以一起用。
+rea-video doesn't render a video. It works out shot by shot whether something was filmed, AI-generated or built in code, then gives a shooting plan, prompts or a code approach for each. For a quick lookalike, Hypit is faster. To understand how the original was made and remake it cheaply, use rea-video. They work fine together.
 
 </details>
 
 <details>
-<summary>一定要配看视频的模型吗？要花多少钱？</summary>
+<summary>Do I need a video-capable model? What does it cost?</summary>
 
-不一定。只用工具是离线、免费的，原始文件的准确率已经很高。从平台下载、压缩过的视频建议配一个能看视频的模型（Gemini、豆包都行），或者用本身能看图的 agent。模型按你用的服务计费。自动生成视频（capsule-cinema）会先免费试跑一遍，你确认后才会正式调用模型。
-
-</details>
-
-<details>
-<summary>能自动把整条视频复刻出来吗？</summary>
-
-可以做「换元素复刻」：用 [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) 的复刻配方，原片的运镜、动作、节奏和声音不变，把人物、产品、服装、场景换掉，整条自动生成并拼回原时间线（见上面的「复刻效果」）。
-想按原样重做：AI 镜头可以自动生成；实拍镜头要你按拍摄方案去拍；代码镜头要 agent 写 Remotion 工程。详见 [docs/replicate.md](docs/replicate.md)。
+No. Tools-only mode is offline and free, and already accurate on original files. For recompressed platform downloads, add a video-capable model (Gemini or Doubao both work) or use an agent that can see images; you pay whatever that service charges. Automatic video generation (capsule-cinema) does a free dry run first and only calls paid models after you confirm.
 
 </details>
 
 <details>
-<summary>可以拿别人的视频直接搬运吗？</summary>
+<summary>Can it remake the whole video automatically?</summary>
 
-不可以。rea-video 用来学习视频的结构、节奏和做法，再用你有权使用的素材重新制作。请勿直接搬运他人的画面、音乐、角色或肖像。投放时请遵守平台规则和当地的 AI 生成内容标识要求。
+Partly. With [capsule-cinema](https://github.com/JuneYaooo/cheap-claude-video) installed, AI shots are generated and placed back on the original timeline automatically. Live shots you film from the shooting plan; code shots the agent writes as a Remotion project. See [docs/replicate.md](docs/replicate.md).
 
 </details>
 
-## 文档
+<details>
+<summary>Can I just repost someone else's video?</summary>
 
-- [docs/what-it-detects.md](docs/what-it-detects.md)：能拆出什么（10 类画面、拍法、打光、调色、声音）
-- [docs/replicate.md](docs/replicate.md)：拿到报告后怎么复刻
-- [docs/cases.md](docs/cases.md)：案例详情
-- [docs/decompose.md](docs/decompose.md)：判断规则
-- [docs/cli.md](docs/cli.md)：命令行用法、和 capsule-cinema 的对接
-- [rea_video/capabilities/](rea_video/capabilities/README.md)：各家视频 / 图像 / 音频模型的能力表，复刻方案按它选模型
-- [eval/RESULTS.md](eval/RESULTS.md)：评测结果
+No. rea-video is for learning a video's structure, pacing and techniques, then remaking it with material you have the rights to. Don't reuse other people's footage, music, characters or likeness. Follow platform rules and local AI-content labeling requirements when you publish.
 
-## 社区
+</details>
 
-欢迎来 [linux.do](https://linux.do/) 交流使用体验、拆解案例和复刻思路。
+## Docs
 
-也欢迎加微信交流群：拆视频时遇到的问题、判断制作方式的方法、复刻经验和案例，都可以在群里交流、分享：
+- [docs/what-it-detects.md](docs/what-it-detects.md): everything it detects (10 visual types, camera, lighting, grade, audio)
+- [docs/replicate.md](docs/replicate.md): remaking from the report
+- [docs/cases.md](docs/cases.md): case details
+- [docs/decompose.md](docs/decompose.md): detection rules
+- [docs/cli.md](docs/cli.md): CLI usage and capsule-cinema integration
+- [rea_video/capabilities/](rea_video/capabilities/README.md): capability tables for video / image / audio models, used to pick models for the remake plan
+- [eval/RESULTS.md](eval/RESULTS.md): eval results
 
-<div align="center">
-<img src="docs/wechat-group-qr.jpg" width="260" alt="rea-video 微信交流群二维码">
-</div>
+The docs are in Chinese for now.
 
-微信群二维码 7 天会过期，扫不了或过期了就在 [issue](https://github.com/JuneYaooo/rea-video/issues) 里说一声，我们补一张新码。
+## Community
 
-## 致谢
+Questions, breakdowns and remake ideas: [GitHub Discussions](https://github.com/JuneYaooo/rea-video/discussions). Chat with us on [Discord](https://discord.gg/dZj8D3GqWT). Chinese speakers can also find us on [linux.do](https://linux.do/).
 
-思路来自 [REA（Reverse Engineer Anything）](https://github.com/morluto/rea)：从现象追到实现，结论附证据，用可测量的方式验证。
+Want a video broken down? Open a [request issue](https://github.com/JuneYaooo/rea-video/issues/new?template=request_breakdown.yml) with the link and we'll publish the result as a case.
+
+## Credits
+
+Inspired by [REA (Reverse Engineer Anything)](https://github.com/morluto/rea): trace from what you see back to how it was made, back every claim with evidence, and verify by measurement.

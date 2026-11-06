@@ -22,4 +22,5 @@ rea-video assemble out/ref/breakdown.json out/ref/remake/results.json
 - AI 视频 / 3D / 实拍 / 数字人镜头：默认用原镜头的**首尾帧 + VLM 提示词**做 `first_last_frame` 生成（`--mode image_to_video` 只用首帧）。
 - 静态图推拉、静帧：不调模型，`assemble` 用测得的缩放/平移参数在本地重建。
 - 代码渲染、录屏镜头：默认保留原片（`keep_original`），重建请按报告中的文字轨/版式用 Remotion 实现。
-- 只复刻部分镜头：`remake-run ... --only 2,5`。
+- 只复刻部分镜头：`remake-run ... --only 2,5`（也可以写镜头 id：`--only shot_002,shot_005`）。有镜头没生成出视频时，命令以非 0 退出，失败详情在 results.json。
+- capsule-cinema 不在默认路径（`~/code/github/capsule-cinema`）时，用 `rea-video prefs capsule_root <路径>` 设一次；或者每次都带 `--capsule-root`，`remake-run` 要和 `remake-plan` 一致；jobs.json 里记录的路径对不上会拒绝执行。

@@ -14,21 +14,33 @@ rendered layouts: rectangles or regions whose texture is photographic (high grey
 entropy) or that hold dense small UI text (a screenshot pasted into a card)."""
 from __future__ import annotations
 
+from .i18n import LangDict, T, join
+
 import cv2
 import numpy as np
 
 BLOCK = 16
-KIND_ZH = {
+KIND_ZH = LangDict({
     "real_footage": "实拍视频素材", "photo_or_image": "照片/图片素材", "screenshot": "界面截图",
     "screen_recording": "录屏素材", "video_clip": "嵌入视频片段", "ai_generated": "AI 生成", "rendered": "制作方渲染",
     "photo": "真实照片", "ai_image": "AI 生成图", "graphic": "设计图形", "logo": "Logo/品牌标识", "product_photo": "商品实拍图",
-}
-REF_ZH = {"product_photo": "商品参考图", "logo": "Logo/品牌参考", "photo": "人物/场景参考图", "real_footage": "动作/场景参考视频",
-          "screenshot": "界面参考图", "screen_recording": "界面参考录屏", "video_clip": "参考视频", "photo_or_image": "参考图"}
+}, en={
+    "real_footage": "live footage", "photo_or_image": "photo / image", "screenshot": "UI screenshot",
+    "screen_recording": "screen recording", "video_clip": "embedded video clip", "ai_generated": "AI-generated", "rendered": "rendered by the creator",
+    "photo": "photo", "ai_image": "AI-generated image", "graphic": "designed graphic", "logo": "logo / brand mark", "product_photo": "product photo",
+})
+REF_ZH = LangDict({"product_photo": "商品参考图", "logo": "Logo/品牌参考", "photo": "人物/场景参考图", "real_footage": "动作/场景参考视频",
+                   "screenshot": "界面参考图", "screen_recording": "界面参考录屏", "video_clip": "参考视频", "photo_or_image": "参考图"},
+                  en={"product_photo": "product reference image", "logo": "logo / brand reference", "photo": "person / scene reference image",
+                      "real_footage": "action / scene reference video", "screenshot": "UI reference image", "screen_recording": "UI reference recording",
+                      "video_clip": "reference video", "photo_or_image": "reference image"})
 # bases whose pixels a model / renderer produced: what the VLM "sees" in them is a reference, not embedded material
 GENERATED_BASES = ("ai_video", "avatar")
 # a 3D render can still carry a pasted screenshot or recording; products / logos / people in it are modelled
 RENDER_REF_KINDS = ("product_photo", "logo", "photo", "real_footage", "ai_image")
+ORIGIN_ZH = LangDict({"real": "用户真实素材", "ai_generated": "AI 生成", "rendered": "制作方渲染", "mixed": "混合（含真实素材）", "unknown": "待确认"},
+                     en={"real": "the user's real material", "ai_generated": "AI-generated", "rendered": "rendered by the creator",
+                         "mixed": "mixed (includes real material)", "unknown": "to confirm"})
 REAL_KINDS = {"real_footage", "photo_or_image", "screenshot", "screen_recording", "video_clip", "photo", "logo", "product_photo"}
 
 
@@ -159,10 +171,10 @@ def detect_embedded(frames: list[np.ndarray], ocr_items: list[dict] | None = Non
         text_area = sum(t["bbox"][2] * t["bbox"][3] for t in texts) / max(1e-6, nw * nh)
         if photo_frac >= 0.35 and text_area < 0.2 and not (ny > 0.6 and nh < 0.2):  # not a subtitle band
             kind = "video_clip" if moving else "photo_or_image"
-            why = f"区域内 {photo_frac:.0%} 的块是照片纹理（灰度熵高、无平涂色）"
+            why = T("区域内 {p:.0%} 的块是照片纹理（灰度熵高、无平涂色）", "{p:.0%} of the blocks in the region have photographic texture (high grey-level entropy, no flat fills)", p=photo_frac)
         elif (light and sat < 0.3 and len(small) >= 6) or len(small) >= 15:
             kind = "screen_recording" if moving else "screenshot"
-            why = f"浅色界面面板内有 {len(texts)} 处文字（其中 {len(small)} 处小字号）"
+            why = T("浅色界面面板内有 {n} 处文字（其中 {s} 处小字号）", "a light UI panel holding {n} text items ({s} of them small type)", n=len(texts), s=len(small))
         if kind:
             certain = kind in ("screenshot", "screen_recording")
             found.append({"kind": kind, "kind_zh": KIND_ZH[kind], "bbox": [round(nx, 3), round(ny, 3), round(nw, 3), round(nh, 3)],
@@ -222,7 +234,7 @@ def material_summary(label: str, image_source: str | None, embedded: list[dict],
             # (for live action the whole frame is already real footage)
             # camera footage "in" a generated or filmed picture is not something a remake can be given
             if kind not in ("ai_image", "real_footage", "video_clip") and (label != "live_action" or kind in ("product_photo", "logo")):
-                refs.append({"kind": kind, "kind_zh": REF_ZH.get(kind, "参考素材"), "description": desc, "source": "vlm"})
+                refs.append({"kind": kind, "kind_zh": REF_ZH.get(kind, T("参考素材", "reference material")), "description": desc, "source": "vlm"})
             continue
         if kind == "real_footage":
             kind = "video_clip"  # a clip inside a layout: real file, but not necessarily camera footage
@@ -249,6 +261,5 @@ def material_summary(label: str, image_source: str | None, embedded: list[dict],
     origin = base
     if real and base in ("ai_generated", "rendered"):
         origin = "mixed"
-    zh = {"real": "用户真实素材", "ai_generated": "AI 生成", "rendered": "制作方渲染", "mixed": "混合（含真实素材）", "unknown": "待确认"}[origin]
-    return {"origin": origin, "origin_zh": zh, "has_real_material": bool(real), "uncertain": bool(uncertain),
+    return {"origin": origin, "origin_zh": ORIGIN_ZH[origin], "has_real_material": bool(real), "uncertain": bool(uncertain),
             "items": [dict(i, kind_zh=KIND_ZH.get(i["kind"], i["kind"])) for i in items], "references": refs}

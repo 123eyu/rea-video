@@ -12,7 +12,9 @@ from .util import LOG, read_json, round_floats, write_json
 
 
 def _expand(path: str) -> str:
-    root = os.getenv("CAPSULE_CINEMA_ROOT", str(Path.home() / "code/github/capsule-cinema"))
+    from .memory import capsule_root
+
+    root = str(capsule_root())
     p = os.path.expanduser(path.replace("${CAPSULE}", root))
     if not os.path.isabs(p):  # relative paths are relative to the repo root
         p = str(Path(__file__).resolve().parents[1] / p)
@@ -154,7 +156,7 @@ def packaging_check(truth_path: str | Path, pack: dict, sfx: list[dict] | None =
             cand = [c for c in others if overlap(g["t0"], g["t1"], c["t0"], c["t1"]) > 0 and _similar(g["text"], c["text"]) >= 0.5]
             if cand:
                 found += 1
-                kind_ok += any(c["kind"] == kind for c in cand)
+                kind_ok += any(c["kind"] == kind or (kind == "label" and c["kind"] == "counter") for c in cand)
         out[key] = {"truth": len(items), "found": found, "kind_ok": kind_ok}
     out["image_stickers_false"] = sum(1 for st in pack.get("stickers", []) if not st.get("in_picture"))
     if sfx is not None and sfx_truth is not None:
@@ -201,6 +203,13 @@ def evaluate(labels_path: Path, out: Path, use_vlm: bool = False, ocr: bool = Tr
             from .probe import provenance
 
             b["provenance"] = {k: v for k, v in provenance(video_info(path)).items() if k != "tags"}  # signatures evolve
+            if not use_vlm:  # tool-only score: drop answers a previous --vlm / review / correct run left in this dir
+                for sh in b["shots"]:
+                    for k in ("vlm", "review", "user"):
+                        sh.pop(k, None)
+                b.pop("whole_video_vlm", None)
+                b.setdefault("analysis", {})["vlm"] = {"requested": False, "used": False}
+                b["analysis"].pop("review", None)
             if b["source"].get("has_audio"):  # audio analysis is cheap: always redo with current code
                 from .audio import analyze_audio
 
@@ -298,8 +307,9 @@ def evaluate(labels_path: Path, out: Path, use_vlm: bool = False, ocr: bool = Tr
         tot = sum(x["truth"] for x in subs)
         summary["packaging"] = {
             "videos": len(packs), "subtitle_lines": tot,
-            "subtitle_recall": round(sum(x["recall"] * x["truth"] for x in subs) / tot, 3) if tot else None,
-            "subtitle_precision_mean": round(sum(x["precision"] or 0 for x in subs) / len(subs), 3),
+            "subtitle_recall": round(sum((x["recall"] or 0) * x["truth"] for x in subs) / tot, 3) if tot else None,
+            "subtitle_precision_mean": (round(sum(x["precision"] for x in precs) / len(precs), 3)
+                                        if (precs := [x for x in subs if x["precision"] is not None]) else None),
             "start_err_median_s": {r["id"]: r["packaging"]["subtitles"]["start_err_median_s"] for r in rows if r.get("packaging")},
             "end_err_median_s": {r["id"]: r["packaging"]["subtitles"]["end_err_median_s"] for r in rows if r.get("packaging")},
             "other_text_found": f"{sum(p_[k]['found'] for p_ in packs for k in ('titles', 'cards', 'labels', 'stickers') if k in p_)}/"

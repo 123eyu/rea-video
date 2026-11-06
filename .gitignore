@@ -9,3 +9,11 @@ __pycache__/
 eval/media/
 .tmp_v06/
 .v08tmp/
+.env
+.env.*
+!.env.example
+eval/code_videos.yaml
+eval/code_videos_holdout.yaml
+eval/particles.yaml
+eval/codegen/
+scripts/roundtrip_compare.py

@@ -15,6 +15,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .util import sha256_file
+
 LOG = logging.getLogger(__name__)
 SR = 44100
 MODEL_NAME = "UVR-MDX-NET-Inst_HQ_3.onnx"
@@ -31,12 +33,12 @@ def models_dir() -> Path:
     return Path(os.getenv("REA_VIDEO_MODELS", str(Path.home() / ".cache/rea-video/models"))).expanduser()
 
 
-MODEL_BYTES = 66_759_214
+MODEL_SHA256 = "317554b07fe1ea5279a77f2b1520a41ea4b93432560c4ffd08792c30fddf9adc"  # 校验下载，防替换
 
 
 def ensure_model(force: bool = False) -> Path:
     p = models_dir() / MODEL_NAME
-    if not force and p.is_file() and p.stat().st_size == MODEL_BYTES:
+    if not force and p.is_file() and sha256_file(p) == MODEL_SHA256:
         return p
     p.parent.mkdir(parents=True, exist_ok=True)
     LOG.info("downloading %s (~67 MB) -> %s", MODEL_NAME, p)
@@ -44,8 +46,8 @@ def ensure_model(force: bool = False) -> Path:
     tmp = p.with_name(f"{p.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.part")
     try:
         urllib.request.urlretrieve(MODEL_URL, tmp)
-        if tmp.stat().st_size != MODEL_BYTES:
-            raise OSError(f"incomplete download: {tmp.stat().st_size} bytes, expected {MODEL_BYTES}")
+        if sha256_file(tmp) != MODEL_SHA256:
+            raise OSError(f"checksum mismatch for {MODEL_NAME} ({tmp.stat().st_size} bytes); delete it and retry")
         tmp.replace(p)  # atomic: readers see the old file or the complete new one
     finally:
         tmp.unlink(missing_ok=True)

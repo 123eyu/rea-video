@@ -15,6 +15,8 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from ..i18n import T, join, semi
+
 from .base import PHOTOGRAPHIC, Aspect, Field, ShotCtx, field_table, register, weighted_median
 
 MEASURES = ("sat", "contrast", "black", "white", "shadow_b", "highlight_b", "mean_b", "mean_l", "bright_share", "dark_share",
@@ -59,36 +61,38 @@ def words(m: dict) -> dict:
     if not m:
         return {}
     sat, con, black = m["sat"], m["contrast"], m["black"]
-    sat_w = "接近黑白" if sat < 0.06 else "低饱和" if sat < 0.2 else "高饱和" if sat > 0.45 else "饱和度正常"
-    con_w = "低对比" if con < 0.16 else "高对比" if con > 0.28 else "对比正常"
+    sat_w = (T("接近黑白", "near monochrome") if sat < 0.06 else T("低饱和", "low saturation") if sat < 0.2
+             else T("高饱和", "high saturation") if sat > 0.45 else T("饱和度正常", "normal saturation"))
+    con_w = T("低对比", "low contrast") if con < 0.16 else T("高对比", "high contrast") if con > 0.28 else T("对比正常", "normal contrast")
     lifted = black > 12
     split = m["shadow_b"] < -5 and m["highlight_b"] > 8  # strict: dark blue / green objects tint shadows a little too
-    tone = "偏暖" if m["mean_b"] > 12 else "偏冷" if m["mean_b"] < 2 else "中性"
+    warm = m["mean_b"] > 12
+    tone = T("偏暖", "warm") if warm else T("偏冷", "cool") if m["mean_b"] < 2 else T("中性", "neutral")
     if sat < 0.06:
-        look = "黑白"
+        look = T("黑白", "black and white")
     elif split:
-        look = "青橙电影感（暗部偏青、亮部偏暖）"
+        look = T("青橙电影感（暗部偏青、亮部偏暖）", "teal-orange cinematic (teal shadows, warm highlights)")
     elif lifted and m["mean_l"] > 55 and sat < 0.3:
-        look = "日系清新（明亮、低饱和、黑位抬高）"
-    elif lifted and tone == "偏暖":
-        look = "复古胶片（黑位抬高、偏暖）"
+        look = T("日系清新（明亮、低饱和、黑位抬高）", "airy Japanese-style (bright, low saturation, lifted blacks)")
+    elif lifted and warm:
+        look = T("复古胶片（黑位抬高、偏暖）", "vintage film (lifted blacks, warm)")
     elif m["mean_l"] < 35 and sat < 0.3:
-        look = "暗调低饱和（电影感）"
+        look = T("暗调低饱和（电影感）", "dark and desaturated (cinematic)")
     elif sat > 0.45 and con > 0.2:
-        look = "高饱和鲜艳"
+        look = T("高饱和鲜艳", "vivid, high saturation")
     else:
-        look = "自然（接近原色）"
-    return {"look": look, "saturation": sat_w, "contrast": con_w, "black": "黑位抬高（发灰的暗部）" if lifted else "黑位正常",
-            "tone": tone}
+        look = T("自然（接近原色）", "natural (close to the original colours)")
+    return {"look": look, "saturation": sat_w, "contrast": con_w,
+            "black": T("黑位抬高（发灰的暗部）", "lifted blacks (greyish shadows)") if lifted else T("黑位正常", "normal blacks"), "tone": tone}
 
 
 class Grade(Aspect):
     def __init__(self):
-        super().__init__(key="grade", title="调色", shot_fields=[
+        super().__init__(key="grade", title="调色", title_en="Grade", shot_fields=[
             Field("color_grade", "调色风格", "调色风格：自然 / 青橙电影感 / 日系清新 / 复古胶片 / 黑白 / 高饱和 / 暗调…，写依据（暗部颜色、黑位、饱和度）",
-                  prefer="measured"),
+                  prefer="measured", en="colour grade"),
         ], video_fields=[
-            Field("grade_overall", "整体调色", "整片调色风格，是否用了 LUT / 滤镜（剪映滤镜、胶片模拟），不同段落是否不同", prefer="seen"),
+            Field("grade_overall", "整体调色", "整片调色风格，是否用了 LUT / 滤镜（剪映滤镜、胶片模拟），不同段落是否不同", prefer="seen", en="overall grade"),
         ])
 
     def measure(self, ctx: ShotCtx) -> dict:
@@ -106,8 +110,8 @@ class Grade(Aspect):
         ms = [(r["aspects"][self.key]["measured"], r["duration"]) for r in main]
         med = {k: weighted_median([(m.get(k), w) for m, w in ms]) for k in MEASURES}
         w = words(med)
-        lines = [f"调色：{w['look']}；{w['saturation']}、{w['contrast']}、{w['black']}、整体{w['tone']}"]
-        return {"result": {"look": w["look"].split("（")[0]}, "measured": {k: round(v, 3) for k, v in med.items() if v is not None},
+        lines = [T("调色：{l}", "Grade: {l}", l=w["look"]) + semi() + join((w["saturation"], w["contrast"], w["black"], T("整体{t}", "overall {t}", t=w["tone"])))]
+        return {"result": {"look": w["look"].split("（")[0].split(" (")[0]}, "measured": {k: round(v, 3) for k, v in med.items() if v is not None},
                 "words": w, "lines": lines, "fields": field_table(self, main, b, {"color_grade": w["look"]})}
 
 

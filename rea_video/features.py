@@ -84,8 +84,46 @@ def spatial_features(bgr: np.ndarray) -> dict:
         axis = float(((ang < 4) | (ang > 86)).mean())
     else:
         axis = 0.0
+    # what the lit part is made of: shaded surfaces (photo, 3D, AI) have gentle gradients; particles, point clouds,
+    # thin lines and small text on black are all fine detail, many small bright peaks per lit pixel
+    lit_mask = gray > 50
+    n_lit = int(lit_mask.sum())
+    gf = gray.astype(np.float32)
+    peaks = (gf >= cv2.dilate(gf, np.ones((3, 3), np.uint8))) & (gf - cv2.blur(gf, (7, 7)) > 18) & lit_mask
+    # the same on the inverted picture: thin dark lines / dots / small text on a light ground (line art, documents)
+    inv = 255 - gray
+    ink_mask = inv > 50
+    n_ink = int(ink_mask.sum())
+    fi = inv.astype(np.float32)
+    ink_peaks = (fi >= cv2.dilate(fi, np.ones((3, 3), np.uint8))) & (fi - cv2.blur(fi, (7, 7)) > 18) & ink_mask
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    # material texture: cameras, generators and 3D renders put fine texture (fabric, skin, foliage, noise) almost
+    # everywhere; vector shapes, gradients, glows and text drawn by code have none. Median-filtered first so a
+    # film-grain overlay on a flat design does not count as texture.
+    # The detail left after removing the smooth component (high-pass), so smooth gradients and glows count as zero.
+    dn = cv2.medianBlur(gray, 5).astype(np.float32)
+    hp = dn - cv2.GaussianBlur(dn, (0, 0), 1.5)
+    hp_e = np.sqrt(np.maximum(cv2.blur(hp * hp, (5, 5)), 0))
+    # gentle slopes (gradients, shading) and whether they curve cleanly (synthetic ramps) or noisily (surfaces)
+    slope = (mag > 2) & (mag < 30)
+    curv = np.abs(cv2.Laplacian(cv2.GaussianBlur(gf, (0, 0), 1.0), cv2.CV_32F))
+    sat, val = hsv[..., 1], hsv[..., 2]
+    vivid = (sat > 90) & (val > 60)
+    hues = np.bincount((hsv[..., 0][vivid] // 15).ravel(), minlength=12) if vivid.any() else np.zeros(12)
     return {
+        "tex_fine": float(((hp_e > 0.6) & (hp_e < 6)).mean()),
+        "grad_share": float(slope.mean()),
+        "grad_clean": float((curv[slope] < 1.0).mean()) if slope.any() else 0.0,
+        "vivid": float(vivid.mean()),
+        "hue_n": float((hues / max(1, hues.sum()) > 0.08).sum()),
+        "sat_p90": float(np.percentile(sat, 90)) / 255.0,
+        "lit_ratio": n_lit / float(h * w),
+        "lit_smooth": float(((mag < 40) & lit_mask).sum()) / n_lit if n_lit else 1.0,
+        "lit_peaks": 100.0 * float(peaks.sum()) / n_lit if n_lit else 0.0,
+        "light_ratio": float((bmean > 227).mean()),
+        "ink_ratio": n_ink / float(h * w),
+        "ink_smooth": float(((mag < 40) & ink_mask).sum()) / n_ink if n_ink else 1.0,
+        "ink_peaks": 100.0 * float(ink_peaks.sum()) / n_ink if n_ink else 0.0,
         "noise_sigma": noise_sigma(gray),
         "flat_ratio": flat_ratio,
         "dark_ratio": dark_ratio,
@@ -165,7 +203,7 @@ def collect_samples(path: str, info: VideoInfo, shot: Shot, n_frames: int = 16, 
             out.sharpness.append(float(cv2.Laplacian(gray, cv2.CV_32F).var()))
             if i in keep:
                 out.frames.append(bgr.copy())
-                out.frame_times.append(shot.start + i / shot.fps)
+                out.frame_times.append(shot.t(shot.start_frame + i))
             if prev_gray is not None and i - 1 >= lo:
                 d = cv2.absdiff(gray, prev_gray)
                 out.pair_mad.append(float(d.mean()))

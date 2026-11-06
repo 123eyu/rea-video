@@ -12,18 +12,20 @@ from . import SCHEMA, __version__
 from .assets import detect_embedded, material_summary
 from .audio import analyze_audio, merge_audio_with_vlm
 from .sound_source import MUSIC_ZH, classify_sound_sources, per_clip_audio
-from .classify import LABEL_ZH, RULES, UNMEASURED, decide, deterministic, drop_scene_text, fuse, group_of, image_source_guess, overlay_layers, top, verdict_text, video_context
+from .classify import LABEL_ZH, OVERLAY_KIND_ZH, RULES, UNMEASURED, decide, deterministic, drop_scene_text, fuse, group_of, image_source_guess, overlay_layers, top, verdict_text, video_context
 from .features import collect_samples, shot_features
 from .media import cut_clip, extract_frame, require_tools, video_info
 from .overlay import ocr_frames, persistent_template, static_overlays, summarize_text
 from .plan import Planner
 from .probe import provenance
+from .motion import element_crops, motion_events, palette, strip_frames
 from .shots import build_track, detect_shots
 from .util import LOG, fmt_time, round_floats, write_json
 from . import aspects
 from .faces import shot_faces
 from .visual import LABEL_SHORT, shot_sheet, storyboard
-from .vlm import SHOT_PROMPT, WHOLE_PROMPT, VLMClient, VLMConfig, normalize_shot_result, shot_hints, vlm_note
+from .i18n import T, join, semi, set_lang
+from .vlm import SHOT_PROMPT, WHOLE_PROMPT, VLMClient, VLMConfig, normalize_shot_result, normalize_whole, prompt_lang_note, shot_hints, vlm_note
 
 
 def _sha256_head(path: Path, limit: int = 64 << 20) -> str:
@@ -35,7 +37,9 @@ def _sha256_head(path: Path, limit: int = 64 << 20) -> str:
 
 def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, whole_vlm: bool = True,
               ocr: bool = True, workers: int = 3, engine: str = "seedance2.0", max_shots_vlm: int = 60,
-              platform_meta: dict | None = None, stems: bool = True, memory: bool = True, packaging: bool = True) -> dict:
+              platform_meta: dict | None = None, stems: bool = True, memory: bool = True, packaging: bool = True,
+              lang: str = "zh") -> dict:
+    lang = set_lang(lang)
     require_tools()
     t0 = time.time()
     video = Path(video).expanduser().resolve()
@@ -48,7 +52,7 @@ def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, 
     track = build_track(str(video), info)
     shots = detect_shots(track)
     LOG.info("detected %d shots", len(shots))
-    marks = [b / s.fps for s in shots for b in s.beats]
+    marks = [s.t(b) for s in shots for b in s.beats]
     audio = analyze_audio(str(video), [s.start for s in shots[1:]], marks) if info.has_audio else {"has_audio": False}
     stem_info: dict = {}
     if info.has_audio and stems:  # strip the soundtrack: original.wav / vocals.wav / music.wav
@@ -104,8 +108,21 @@ def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, 
         layers = overlay_layers(ov, text, template)
         sid = f"shot_{s.index:03d}"
         shot_sheet(smp.frames, smp.frame_times, out / "shots" / f"{sid}.jpg")
-        extract_frame(video, s.start + min(0.05, s.duration / 4), out / "shots" / f"{sid}_first.jpg", width=min(1080, info.width or 1080))
-        extract_frame(video, max(s.start, s.end - min(0.08, s.duration / 4)), out / "shots" / f"{sid}_last.jpg", width=min(1080, info.width or 1080))
+        still_w = min(1080, info.display_size[0] or 1080)  # never upscale; rotated video: displayed width
+        extract_frame(video, s.start + min(0.05, s.duration / 4), out / "shots" / f"{sid}_first.jpg", width=still_w)
+        extract_frame(video, max(s.start, s.end - min(0.08, s.duration / 4)), out / "shots" / f"{sid}_last.jpg", width=still_w)
+        motion = None
+        if top(probs)[0] in ("code_render", "screen_capture") or facts.get("graphic_score", 0.0) >= 0.5:
+            # rendered picture: element-level motion timeline, key-frame strip and hex palette for a code remake
+            motion = motion_events(video, info, s.start, s.duration, text.get("items"))
+            sframes, stimes = strip_frames(video, info, s.start, s.duration)
+            if sframes:
+                shot_sheet(sframes, stimes, out / "shots" / f"{sid}_strip.jpg", n=len(sframes), cell_w=200)
+                motion["palette"] = palette(sframes[-1])
+                motion["palette_start"] = palette(sframes[0])
+            sheet = element_crops(video, info, s.start, s.end, motion, out / "shots", sid, min(1080, info.display_size[0] or 1080))
+            if sheet:
+                motion["elements_sheet"] = sheet
         rec = {
             "id": sid, **s.to_dict(), "features": round_floats(feats), "faces": round(faces, 3),
             "aspects": round_floats(asp), "overlay": round_floats(ov), "text": text, "layers": layers, "embedded_assets": round_floats(embedded),
@@ -113,6 +130,10 @@ def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, 
             "assets": {"sheet": f"shots/{sid}.jpg", "first_frame": f"shots/{sid}_first.jpg", "last_frame": f"shots/{sid}_last.jpg"},
             "vlm": None,
         }
+        if motion is not None:
+            rec["motion"] = round_floats(motion)
+            if (out / "shots" / f"{sid}_strip.jpg").exists():
+                rec["assets"]["strip"] = f"shots/{sid}_strip.jpg"
         shot_records.append(rec)
         dl, dp = top(probs)
         LOG.info("%s %s-%s det=%s(%.0f%%) %s", sid, fmt_time(s.start), fmt_time(s.end), dl, dp * 100, facts.get("temporal_family"))
@@ -139,7 +160,7 @@ def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, 
                     media += [(out / rec["assets"]["first_frame"], "image/jpeg"), (out / rec["assets"]["sheet"], "image/jpeg"),
                               (out / rec["assets"]["last_frame"], "image/jpeg")]
                 dl, dp = top(rec["deterministic"]["probs"])
-                prompt = SHOT_PROMPT.format(hints=shot_hints(rec["features"], rec["deterministic"]["facts"], dl, dp))
+                prompt = SHOT_PROMPT.format(hints=shot_hints(rec["features"], rec["deterministic"]["facts"], dl, dp)) + prompt_lang_note()
                 try:
                     rec["vlm"] = normalize_shot_result(client.ask_json(prompt, media))
                 except Exception as exc:  # keep going; deterministic result stands
@@ -159,7 +180,7 @@ def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, 
                 try:
                     low = cut_clip(video, 0, info.duration, out / "clips" / "whole_480p.mp4", width=480, audio=True, crf=30)
                     cuts = ", ".join(f"{r['start']:.2f}" for r in shot_records)
-                    whole = client.ask_json(WHOLE_PROMPT.format(shots=cuts), [(low, "video/mp4")], max_tokens=6000)
+                    whole = normalize_whole(client.ask_json(WHOLE_PROMPT.format(shots=cuts) + prompt_lang_note(), [(low, "video/mp4")], max_tokens=6000))
                 except Exception as exc:
                     vlm_info["errors"].append(f"whole: {str(exc)[:160]}")
             asked = shot_records[:max_shots_vlm]
@@ -173,7 +194,7 @@ def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, 
                 LOG.warning("VLM: every call failed (%s); result is deterministic only", (vlm_info["errors"] or ["?"])[0])
 
     breakdown = {
-        "schema": SCHEMA, "tool": {"name": "rea-video", "version": __version__},
+        "schema": SCHEMA, "tool": {"name": "rea-video", "version": __version__}, "lang": lang,
         "source": {"path": str(video), "filename": video.name, "sha256_head": _sha256_head(video), "width": info.width,
                    "height": info.height, "fps": round(info.fps, 3), "duration": round(info.duration, 3), "vcodec": info.vcodec,
                    "aspect_ratio": info.aspect_ratio, "has_audio": info.has_audio, "rotation": info.rotation},
@@ -217,33 +238,47 @@ def _ai_or_live_doubt(label: str, facts: dict, prov: dict, vctx: dict, seen_live
         # a cinema / mirrorless camera shooting 24p and exported at 30 fps leaves the same cadence as a generator:
         # measured on a phone clip converted 30 -> 24 -> 30, the tools call it AI at 89% (eval/RESULTS.md 2026-11-01)
         if seen_live >= 0.5:
-            return "AI 还是 24p 相机实拍待确认：帧率痕迹只说明素材是 24fps 源，看图的一方认为是实拍，又没有 AIGC 标识"
+            return T("AI 还是 24p 相机实拍待确认：帧率痕迹只说明素材是 24fps 源，看图的一方认为是实拍，又没有 AIGC 标识",
+                     "AI or 24p camera footage, to confirm: the frame-rate marks only say the source was 24fps, the image reader calls it live action, and there is no AIGC label")
         if not seen:
-            return "AI 还是 24p 相机实拍待确认：只有帧率证据（24fps 源）、没有 AIGC 标识，需要看图确认"
+            return T("AI 还是 24p 相机实拍待确认：只有帧率证据（24fps 源）、没有 AIGC 标识，需要看图确认",
+                     "AI or 24p camera footage, to confirm: only frame-rate evidence (24fps source) and no AIGC label, needs an image reader")
+    if label == "ai_video" and facts.get("pulldown") == "interpolated" and not (prov.get("hints") or {}).get("generator"):
+        # a sharpness rhythm with no duplicate frames: a re-encode whose platform tags were stripped leaves the same rhythm
+        if seen_live >= 0.5:
+            return T("AI 还是实拍待确认：只有清晰度节奏、没有重复帧（重新压缩也会留下），看图的一方认为是实拍，又没有 AIGC 标识",
+                     "AI or live action, to confirm: only a sharpness rhythm and no duplicate frames (re-encodes leave it too), the image reader calls it live action, and there is no AIGC label")
+        return T("AI 还是实拍待确认：只有清晰度节奏、没有重复帧（重新压缩也会留下）、没有 AIGC 标识，需要看图确认",
+                 "AI or live action, to confirm: only a sharpness rhythm, no duplicate frames (re-encodes leave it too) and no AIGC label, needs an image reader")
     if not facts.get("transcode_degraded"):
         return None
-    if label == "live_action" and vctx.get("native30") and not facts.get("pulldown"):
-        return None
+    if label == "live_action" and not facts.get("pulldown"):
+        if vctx.get("native30") or (facts.get("native_cadence") and seen_live >= 0.5):
+            return None  # camera cadence on the file, or on this shot plus an image reader that saw filmed footage
+        return T("实拍还是 AI 待确认：平台转码抹掉了噪声证据，这一镜没有 24fps 源的重复帧，但整片不是原生 30fps，需要看图确认",
+                 "Live action or AI, to confirm: the platform transcode erased the noise cues; this shot carries no 24fps-source duplicate frames, but the file is not native 30fps throughout, needs an image reader")
     if label == "ai_video":
-        return "实拍 / 定格还是 AI 待确认：没有 AIGC 标识；24fps 源痕迹在 AI、定格动画、电影机拍摄里都会出现"
-    return "实拍还是 AI 待确认：画面源自 24fps 素材且没有 AIGC 标识，不是手机原生 30fps 的特征"
+        return T("实拍 / 定格还是 AI 待确认：没有 AIGC 标识；24fps 源痕迹在 AI、定格动画、电影机拍摄里都会出现",
+                 "Live action / stop motion or AI, to confirm: no AIGC label; 24fps-source marks appear in AI video, stop motion and cinema-camera footage alike")
+    return T("实拍还是 AI 待确认：画面源自 24fps 素材且没有 AIGC 标识，不是手机原生 30fps 的特征",
+             "Live action or AI, to confirm: the picture comes from 24fps material with no AIGC label, not the signature of native 30fps phone footage")
 
 
 def _user_real(material: dict, real: bool) -> None:
     """Apply the user's answer to "does this shot use real (user-supplied) material?"."""
     if real and not material["has_real_material"]:
-        material["items"].append({"kind": "user_marked", "kind_zh": "用户标注的真实素材", "region": "unknown", "real_material": True,
-                                  "source": "user"})
+        material["items"].append({"kind": "user_marked", "kind_zh": T("用户标注的真实素材", "real material marked by the user"), "region": "unknown",
+                                  "real_material": True, "source": "user"})
     if not real:
         for it in material["items"]:
             if it.get("real_material"):
                 it["real_material"] = False
-                it["note"] = "用户纠正：不是真实素材"
+                it["note"] = T("用户纠正：不是真实素材", "User correction: not real material")
     material["has_real_material"] = real
     if real and material["origin"] in ("ai_generated", "rendered", "unknown"):
-        material["origin"], material["origin_zh"] = "mixed", "混合（含真实素材）"
+        material["origin"], material["origin_zh"] = "mixed", T("混合（含真实素材）", "mixed (includes real material)")
     if not real and material["origin"] in ("real", "mixed"):
-        material["origin"], material["origin_zh"] = "unknown", "待确认（用户说不是真实素材）"
+        material["origin"], material["origin_zh"] = "unknown", T("待确认（用户说不是真实素材）", "to confirm (user says it is not real material)")
     material["user_corrected"] = True
 
 
@@ -283,14 +318,27 @@ def _vlm_gate(rec: dict, vprobs: dict | None, vctx: dict) -> dict | None:
               and bool(facts.get("big_face") or facts.get("lowlight") or facts.get("face_area", 0) >= RULES["big_face"]["area"]))
     if v in UNMEASURED:  # 2D animation / stop motion: the tools cannot score them, so they cannot back them either
         return vprobs
-    if v not in (d, ranked[1][0]) and not person:  # it must back one of the tools' two best guesses
+    # the tools are undecided when no label reaches 0.4 and the reader's pick trails the runner-up by a hair:
+    # a lip macro with no face found scores 3D 0.35 / AI 0.27 / live 0.22 (issue #8 #22-#27), which is no call
+    undecided = dp < 0.4 and vprobs.get(v, 0.0) > 0 and rec["deterministic"]["probs"].get(v, 0.0) >= 0.15 \
+        and sp - rec["deterministic"]["probs"].get(v, 0.0) <= 0.08
+    # inside the tools' first group (3D vs code render: both "rendered") the reader picks the subtype; the tools
+    # only measured "rendered texture", which is the part the reader cannot see wrong (particle explainer #5 / #21:
+    # tools 3D then AI, reader code render)
+    same_group = group_of(v) == group_of(d) == "rendered"
+    if v not in (d, ranked[1][0]) and not person and not undecided and not same_group:  # it must back one of the tools' two best guesses
         return None
     # the tools' confidence only protects the AI / live axis (frame-rate evidence), not a "rendered" texture call
     if (d in AI_LIVE_AXIS or v in AI_LIVE_AXIS) and not (person and d not in AI_LIVE_AXIS):
-        if dp >= 0.65 and dp - sp >= 0.25:  # tools are sure: frame-rate evidence beats "looks real / looks like a presenter"
+        # a sharpness rhythm alone (pulldown "interpolated", no duplicate frames) is not frame-rate evidence
+        if dp >= 0.65 and dp - sp >= 0.25 and facts.get("pulldown") != "interpolated":  # tools are sure: frame-rate evidence beats "looks real / looks like a presenter"
             return None
-    if v == "live_action" and facts.get("transcode_degraded") and not vctx.get("native30"):
-        return None  # transcoded 24fps-source footage never becomes live action on looks alone
+    if (v == "live_action" and facts.get("transcode_degraded") and not vctx.get("native30")
+            and not facts.get("native_cadence")):
+        # transcoded 24fps-source footage never becomes live action on looks alone; a shot that itself carries
+        # no duplicate frames in a 30 fps file has the camera cadence, so the reader's eye decides there
+        # (issue #8 lipstick ad: AI opener with pulldown + 75 s of phone footage without, whole-video native30 False)
+        return None
     return vprobs
 
 
@@ -331,11 +379,30 @@ def _top_group(probs: dict[str, float]) -> str:
     return max(g, key=g.get)
 
 
-def finalize(breakdown: dict, out: Path, engine: str = "seedance2.0") -> dict:
+def _agent_review_dispute(dt: str, vt: dict | None, rv: dict | None, reviewed: bool, decided: str) -> str | None:
+    """An agent-only review (no VLM) disagreeing with the tools on the AI/live axis cannot flip
+    the label — the fusion deliberately follows the tools there (eval-calibrated, see _vlm_gate)
+    — but the disagreement must stay visible instead of hiding inside a confident-looking label.
+    Mirrors the VLM disputed flag above."""
+    if decided == "user" or vt or not rv or sum(rv.values()) == 0 or reviewed:
+        return None
+    if (group_of(_top_group_label(rv)) == "live_action") != (group_of(dt) == "live_action"):
+        return T("工具判{d}、看图复核判{r}，融合规则在 AI/实拍轴上跟了工具（评测校准）：请对照截图核实复核证据是否真的看得见",
+                 "Tools say {d}, the image review says {r}; on the AI / live-action axis the fusion follows the tools (eval-calibrated): check the frames to see whether the review's evidence is really visible",
+                 d=LABEL_ZH[dt], r=LABEL_ZH[_top_group_label(rv)])
+    return None
+
+
+def finalize(breakdown: dict, out: Path, engine: str | None = None) -> dict:
     """(Re)classify every shot from stored features + VLM answers, plan replication,
     summarise and write breakdown.json / reports. Safe to call again after the
     classifier changes (no re-decoding)."""
     out = Path(out)
+    set_lang(breakdown.get("lang", "zh"))
+    # remember the engine: apply-review / correct / eval call finalize without one and must not reset it
+    engine = breakdown["engine"] = engine or breakdown.get("engine") or "seedance2.0"
+    if breakdown.get("whole_video_vlm") is not None:  # older runs stored the raw answer
+        breakdown["whole_video_vlm"] = normalize_whole(breakdown["whole_video_vlm"])
     shot_records = breakdown["shots"]
     audio = breakdown.get("audio", {})
     prov = breakdown.get("provenance", {})
@@ -352,6 +419,10 @@ def finalize(breakdown: dict, out: Path, engine: str = "seedance2.0") -> dict:
         from .packaging import apply_review as apply_pack_review
 
         apply_pack_review(pack)
+        from .packaging import relocalize
+
+        src = breakdown["source"]
+        relocalize(pack, src.get("width") if src.get("rotation") in (90, 270) else src.get("height"))
     vctx = video_context(shot_records, prov, breakdown["source"].get("fps"))
     breakdown["video_context"] = vctx
     for rec in shot_records:
@@ -372,13 +443,21 @@ def finalize(breakdown: dict, out: Path, engine: str = "seedance2.0") -> dict:
         src = seen.get("image_source")
         img_src = src if src and src != "unknown" else image_source_guess(rec["features"], rec["deterministic"]["facts"])
         evidence = (list(rec["deterministic"]["evidence"]) + [f"[VLM] {e}" for e in (rec.get("vlm") or {}).get("evidence", [])[:6]]
-                    + [f"[{(rec.get('review') or {}).get('_by', 'agent')} 看图] {e}" for e in (rec.get("review") or {}).get("evidence", [])[:6]])
+                    + [T("[{by} 看图] {e}", "[{by} review] {e}", by=(rec.get('review') or {}).get('_by', 'agent'), e=e)
+                       for e in (rec.get("review") or {}).get("evidence", [])[:6]])
+        split = (rec.get("review") or {}).get("split_suggestion")
+        if split and split.get("cuts"):
+            by = (rec.get("review") or {}).get("_by", "agent")
+            seq = "→".join(LABEL_ZH.get(x, x) for x in split.get("labels") or [])
+            evidence.append(T("[{by} 看图] 本镜头疑为多刀合并，建议在 {at} 处拆分", "[{by} review] This shot looks like several cuts merged; suggest splitting at {at}",
+                              by=by, at=join(fmt_time(c) for c in split["cuts"][:6]))
+                            + (T("（{seq}）", " ({seq})", seq=seq) if seq else "") + (T("：", ": ") + split['note'] if split.get("note") else ""))
         decided = "fused" if rec.get("vlm") else ("fused_agent" if rec.get("review") else "deterministic")
         user = rec.get("user") or {}
         if user.get("label") in LABEL_ZH:  # the user said what this shot is: that is the answer
             label, conf, decided = user["label"], 1.0, "user"
             probs = {k: (1.0 if k == label else 0.0) for k in LABEL_ZH}
-            evidence = [f"[用户纠正] 改为{LABEL_ZH[label]}" + (f"：{user['note']}" if user.get("note") else "")] + evidence
+            evidence = [T("[用户纠正] 改为{l}", "[User correction] Changed to {l}", l=LABEL_ZH[label]) + (T("：", ": ") + user['note'] if user.get("note") else "")] + evidence
         rec["base"] = {"label": label, "label_zh": LABEL_ZH[label], "confidence": round(conf, 3), "probs": round_floats(probs),
                        "image_source": img_src if label in ("static_hold", "still_motion") else None,
                        "generator_guess": seen.get("generator_guess"),
@@ -391,15 +470,20 @@ def finalize(breakdown: dict, out: Path, engine: str = "seedance2.0") -> dict:
                 and (_top_group(vt) == "live_action") != (group_of(dt) == "live_action")):
             # the tools and the VLM disagree on whether the picture was filmed: the VLM is sometimes confidently wrong
             # (it has invented "garbled clock digits" on live footage), so ask for a look at its evidence
-            follow = "VLM" if group_of(label) == group_of(_top_group_label(vt)) else "工具"
-            rec["base"]["disputed"] = (f"工具判{LABEL_ZH[dt]}、VLM 判{LABEL_ZH[_top_group_label(vt)]}，结论跟了{follow}："
-                                       "请对照截图核实 VLM 的证据是否真的看得见")
+            follow = "VLM" if group_of(label) == group_of(_top_group_label(vt)) else T("工具", "the tools")
+            rec["base"]["disputed"] = T("工具判{d}、VLM 判{v}，结论跟了{f}：请对照截图核实 VLM 的证据是否真的看得见",
+                                        "Tools say {d}, the VLM says {v}; the verdict follows {f}: check the frames to see whether the VLM's evidence is really visible",
+                                        d=LABEL_ZH[dt], v=LABEL_ZH[_top_group_label(vt)], f=follow)
+        agent_dispute = _agent_review_dispute(dt, vt, rv, reviewed, decided)
+        if agent_dispute:
+            rec["base"]["disputed"] = agent_dispute
         seen_live = (seen.get("label_probs") or {}).get("live_action", 0.0) / (sum((seen.get("label_probs") or {}).values()) or 1.0)
         doubt = None if decided == "user" else _ai_or_live_doubt(label, rec["deterministic"]["facts"], prov, vctx, seen_live,
                                                                   seen=bool(seen.get("label_probs")))
         if not doubt and decided != "user" and label in UNMEASURED and not (rec.get("vlm") and rec.get("review")):
-            doubt = (f"{LABEL_ZH[label]}只有一方看图判断（工具测不出这一类）：" +
-                     ("定格动画和 AI 视频、实拍容易混" if label == "stop_motion" else "2D 动画和代码动效、AI 视频容易混") + "，请再看一眼")
+            doubt = (T("{l}只有一方看图判断（工具测不出这一类）：", "{l} rests on a single image reader (the tools cannot measure this class): ", l=LABEL_ZH[label]) +
+                     (T("定格动画和 AI 视频、实拍容易混", "stop motion is easily confused with AI video and live action") if label == "stop_motion"
+                      else T("2D 动画和代码动效、AI 视频容易混", "2D animation is easily confused with code-driven motion graphics and AI video")) + T("，请再看一眼", ", take another look"))
         if doubt:
             rec["base"]["confidence"] = round(min(conf, DOUBT_CAP), 3)
             rec["base"]["uncertain"] = doubt
@@ -420,7 +504,8 @@ def finalize(breakdown: dict, out: Path, engine: str = "seedance2.0") -> dict:
             rec["layers"] = [l for l in rec["layers"] if not (l.get("texts") and l["kind"] in ("label", "title")
                                                                and any(_same_words(t, h) for t in l["texts"] for h in huazi))] + extra
         if (rec.get("features") or {}).get("measured_region"):
-            rec["base"]["evidence"].append("画面统计只在贴纸/动图之外的区域测量（x{:.0%} y{:.0%} 宽{:.0%} 高{:.0%}）".format(*rec["features"]["measured_region"]))
+            rec["base"]["evidence"].append(T("画面统计只在贴纸/动图之外的区域测量（x{:.0%} y{:.0%} 宽{:.0%} 高{:.0%}）",
+                                             "Picture statistics measured only outside the sticker / GIF region (x{:.0%} y{:.0%} w{:.0%} h{:.0%})").format(*rec["features"]["measured_region"]))
         # imported real material: full-frame from the base label, embedded regions only where
         # the frame is a rendered layout (photographic bases would trip the region detector)
         rendered_frame = label in ("code_render", "screen_capture", "cg_3d") or (label in ("static_hold", "still_motion") and img_src in ("graphic", "screenshot"))
@@ -441,13 +526,13 @@ def finalize(breakdown: dict, out: Path, engine: str = "seedance2.0") -> dict:
             steps = planner.edit_steps(raw)
             if steps:
                 rec["ai_edits"] = steps
-                rec["verdict"] += "；拍完后经 AI 加工（" + "、".join(e["kind_zh"] for e in steps) + "）"
+                rec["verdict"] += semi() + T("拍完后经 AI 加工（{k}）", "AI-processed after filming ({k})", k=join(e["kind_zh"] for e in steps))
         if rec["material"]["has_real_material"]:
             kinds = []
             for it in rec["material"]["items"]:
                 if it.get("real_material") and it["kind_zh"] not in kinds:
                     kinds.append(it["kind_zh"])
-            rec["verdict"] += "；引入真实素材（" + "、".join(kinds) + "）"
+            rec["verdict"] += semi() + T("引入真实素材（{k}）", "brings in real material ({k})", k=join(kinds))
         rec["replication"] = planner.plan_shot(label, rec, video_meta, engine=engine)
 
     # ---------------- summary --------------------------------------------------------
@@ -459,40 +544,40 @@ def finalize(breakdown: dict, out: Path, engine: str = "seedance2.0") -> dict:
     overlay_kinds = sorted({l["kind"] for r in shot_records for l in r["layers"]})
     conf = sum(r["base"]["confidence"] * r["duration"] for r in shot_records) / total
     parts = [f"{LABEL_ZH[k]} {v / total:.0%}" for k, v in mix_sorted]
-    kind_zh = {"subtitle": "字幕", "title": "标题", "label": "文字标注", "static_graphic": "图形贴片", "layout_template": "版式模板",
-               "huazi": "花字", "animated_sticker": "动态贴纸/GIF", "static_sticker": "静态贴纸", "pip": "画中画"}
-    verdict = ("混合制作：" if len(mix) > 1 or overlay_kinds else "") + " + ".join(parts)
+    verdict = (T("混合制作：", "Mixed production: ") if len(mix) > 1 or overlay_kinds else "") + " + ".join(parts)
     unsure = sum(r["duration"] for r in shot_records if r["base"]["label"] in ("ai_video", "live_action")
                  and r["base"]["confidence"] < 0.65
                  and (r.get("deterministic") or {}).get("facts", {}).get("transcode_degraded"))
     if unsure / total > 0.3 and not any(visual_opinion(r) for r in shot_records):
-        verdict += f"（其中 {unsure / total:.0%} 时长实拍还是 AI 待确认：平台转码抹掉了噪声证据，需开 VLM 或人工看画面）"
+        verdict += T("（其中 {r:.0%} 时长实拍还是 AI 待确认：平台转码抹掉了噪声证据，需开 VLM 或人工看画面）",
+                     " ({r:.0%} of the duration is live action or AI, to confirm: the platform transcode erased the noise evidence, needs a VLM pass or a human look at the frames)",
+                     r=unsure / total)
     doubtful = sum(r["duration"] for r in shot_records if r["base"].get("uncertain"))
     if doubtful / total > 0.3 and not (unsure / total > 0.3 and not any(visual_opinion(r) for r in shot_records)):
-        verdict += f"（其中 {doubtful / total:.0%} 时长实拍还是 AI 证据不足，待确认）"
+        verdict += T("（其中 {r:.0%} 时长实拍还是 AI 证据不足，待确认）", " ({r:.0%} of the duration lacks evidence for live action vs AI, to confirm)", r=doubtful / total)
     if overlay_kinds:
-        verdict += "；叠加层：" + "、".join(kind_zh.get(k, k) for k in overlay_kinds) + "（代码/剪辑软件合成）"
+        verdict += semi() + T("叠加层：{k}（代码/剪辑软件合成）", "overlays: {k} (composited in code / an editor)", k=join(OVERLAY_KIND_ZH.get(k, k) for k in overlay_kinds))
     real_shots = [r for r in shot_records if r.get("material", {}).get("has_real_material")]
     real_kinds: dict[str, float] = {}
     for r in real_shots:
         for k in {it["kind_zh"] for it in r["material"]["items"] if it.get("real_material")}:
             real_kinds[k] = real_kinds.get(k, 0.0) + r["duration"]
     if real_shots:
-        verdict += "；用到真实素材：" + "、".join(f"{k}（{v:.1f}s）" for k, v in sorted(real_kinds.items(), key=lambda kv: -kv[1]))
+        verdict += semi() + T("用到真实素材：", "real material used: ") + join(T("{k}（{v:.1f}s）", "{k} ({v:.1f}s)", k=k, v=v) for k, v in sorted(real_kinds.items(), key=lambda kv: -kv[1]))
     edited: dict[str, int] = {}
     for r in shot_records:
         for e in r.get("ai_edits") or []:
             edited[e["kind_zh"]] = edited.get(e["kind_zh"], 0) + 1
     if edited:
-        verdict += "；实拍经 AI 二次加工：" + "、".join(f"{k} {v} 镜" for k, v in edited.items())
+        verdict += semi() + T("实拍经 AI 二次加工：", "live action AI-processed afterwards: ") + join(T("{k} {v} 镜", "{k} ({v} shots)", k=k, v=v) for k, v in edited.items())
     refs: dict[str, list[int]] = {}
     for r in shot_records:
         for k in dict.fromkeys(x["kind_zh"] for x in (r.get("material") or {}).get("references", [])):
             refs.setdefault(k, []).append(r["index"])
     if refs:
-        verdict += "；复刻需准备参考：" + "、".join(f"{k}（{len(v)} 镜）" for k, v in sorted(refs.items(), key=lambda kv: -len(kv[1])))
+        verdict += semi() + T("复刻需准备参考：", "references to prepare for the remake: ") + join(T("{k}（{n} 镜）", "{k} ({n} shots)", k=k, n=len(v)) for k, v in sorted(refs.items(), key=lambda kv: -len(kv[1])))
     if audio.get("beat_synced_edit"):
-        verdict += "；剪辑卡在音乐节拍上"
+        verdict += semi() + T("剪辑卡在音乐节拍上", "cuts land on the music beat")
     summary = {
         "duration": breakdown["source"]["duration"], "shots": len(shot_records), "verdict": verdict,
         "production_mix": [{"label": k, "label_zh": LABEL_ZH[k], "seconds": round(v, 2), "ratio": round(v / total, 3)} for k, v in mix_sorted],
@@ -544,13 +629,17 @@ def finalize(breakdown: dict, out: Path, engine: str = "seedance2.0") -> dict:
         if t["track"] == "music" and srcs.get("music"):
             lean = srcs["music"]["leaning"]
             t["source"] = srcs["music"]["source_zh"]
-            t["how"] = {"ai_generated": "原曲倾向 AI 生成：用 Suno 等（capsule-cinema UniversalMusicGenerationTool）按风格/BPM/调性重新生成，MV 类连歌词一起按新内容写",
-                        "existing_library": "原曲倾向现成曲库配乐：按 BPM/情绪/调性在曲库检索同类曲，或用 AI 生成相近风格的免版权曲",
-                        "popular_song": "原曲倾向现成知名歌曲：直接使用有版权风险，需要授权或换成相近风格的曲库/AI 曲"}[lean]
+            t["how"] = {"ai_generated": T("原曲倾向 AI 生成：用 Suno 等（capsule-cinema UniversalMusicGenerationTool）按风格/BPM/调性重新生成，MV 类连歌词一起按新内容写",
+                                          "The original track leans AI-generated: regenerate with Suno or similar (capsule-cinema UniversalMusicGenerationTool) matching style / BPM / key; for an MV, rewrite the lyrics for the new content too"),
+                        "existing_library": T("原曲倾向现成曲库配乐：按 BPM/情绪/调性在曲库检索同类曲，或用 AI 生成相近风格的免版权曲",
+                                              "The original track leans stock library music: search a library by BPM / mood / key for a similar track, or generate a royalty-free track in a similar style with AI"),
+                        "popular_song": T("原曲倾向现成知名歌曲：直接使用有版权风险，需要授权或换成相近风格的曲库/AI 曲",
+                                          "The original track leans a well-known song: using it as-is carries copyright risk; license it or swap in a library / AI track in a similar style")}[lean]
         if t["track"] == "sfx" and srcs.get("sfx"):
             t["source"] = srcs["sfx"]["source_zh"]
             if srcs["sfx"]["leaning"] == "ai_native":
-                t["how"] = "原片音效随 AI 视频片段一起生成：复刻时用支持原生音频的视频模型（Seedance 2.x / Veo 3.1 / Kling）直接出声，或视频生音效（HunyuanVideo-Foley）"
+                t["how"] = T("原片音效随 AI 视频片段一起生成：复刻时用支持原生音频的视频模型（Seedance 2.x / Veo 3.1 / Kling）直接出声，或视频生音效（HunyuanVideo-Foley）",
+                             "The original sound effects were generated together with the AI video clips: for the remake, use a video model with native audio (Seedance 2.x / Veo 3.1 / Kling), or video-to-SFX (HunyuanVideo-Foley)")
         if t["track"] == "voice" and srcs.get("voice"):
             t["source"] = srcs["voice"]["source_zh"]
     from .visual import audio_timeline
@@ -561,35 +650,35 @@ def finalize(breakdown: dict, out: Path, engine: str = "seedance2.0") -> dict:
         breakdown["assets"]["audio_timeline"] = "audio.png"
     a_parts = []
     if audio.get("voice", {}).get("present"):
-        a_parts.append("人声")
+        a_parts.append(T("人声", "voice"))
     if audio.get("music", {}).get("present"):
         ms = srcs.get("music") or {}
-        a_parts.append(f"BGM {audio['music'].get('tempo_bpm', '?')}BPM（{ms.get('source_zh', '来源待确认')}"
-                       + (f"，倾向{MUSIC_ZH[ms['leaning']]}" if ms.get("source") == "unknown" else "") + "）")
+        a_parts.append(T("BGM {bpm}BPM（{src}", "music {bpm}BPM ({src}", bpm=audio['music'].get('tempo_bpm', '?'), src=ms.get('source_zh', T('来源待确认', 'source to confirm')))
+                       + (T("，倾向{m}", ", leaning {m}", m=MUSIC_ZH[ms['leaning']]) if ms.get("source") == "unknown" else "") + T("）", ")"))
     n_sfx = len(breakdown["audio_plan"].get("sfx_merged", []))
     if n_sfx:
-        a_parts.append(f"音效 {n_sfx} 处")
+        a_parts.append(T("音效 {n} 处", "{n} sound effects", n=n_sfx))
     if a_parts:
-        summary["verdict"] += "；声音：" + " + ".join(a_parts)
+        summary["verdict"] += semi() + T("声音：", "audio: ") + " + ".join(a_parts)
     if pack:
         cues = [c for c in pack.get("text_cues", []) if not c.get("part_of_picture")]
         p_parts = []
         n_sub = sum(1 for c in cues if c["kind"] == "subtitle")
         if n_sub:
-            p_parts.append(f"字幕 {n_sub} 句")
-        for k, zh in (("huazi", "花字"), ("title", "标题"), ("label", "文字标注")):
+            p_parts.append(T("字幕 {n} 句", "{n} subtitle lines", n=n_sub))
+        for k in ("huazi", "title", "label"):
             n = sum(1 for c in cues if c["kind"] == k)
             if n:
-                p_parts.append(f"{zh} {n} 处")
+                p_parts.append(T("{k} {n} 处", "{k} ×{n}", k=OVERLAY_KIND_ZH[k], n=n))
         n_st = sum(1 for st in pack.get("stickers", []) if not st.get("in_picture") and st.get("confidence") != "low")
         if n_st:
-            p_parts.append(f"贴纸/动图 {n_st} 处")
+            p_parts.append(T("贴纸/动图 {n} 处", "stickers / GIFs ×{n}", n=n_st))
         on = (pack.get("sfx_alignment") or {}).get("sfx_on", {})
         n_on = sum(v for k, v in on.items() if k != "cut")
         if n_on:
-            p_parts.append(f"{n_on} 个音效卡在文字/贴纸出现上")
+            p_parts.append(T("{n} 个音效卡在文字/贴纸出现上", "{n} sound effects land on text / sticker pops", n=n_on))
         if p_parts:
-            summary["verdict"] += "；剪辑包装：" + "、".join(p_parts)
+            summary["verdict"] += semi() + T("剪辑包装：", "packaging: ") + join(p_parts)
         summary["packaging"] = pack.get("summary_zh", [])
     from .production import production_plan
 

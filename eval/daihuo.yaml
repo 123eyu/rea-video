@@ -1,0 +1,26 @@
+# 带货评测集：实拍开箱 + 「真人出镜画面做参考的 AI 带货」教程片，抖音转码（HEVC 1080x1920 30fps）
+# 视频不入库（eval/media/ 已 gitignore）：用 TikHub douyin_app_v3_fetch_one_video 按 aweme_id 取 bit_rate[0] 的 1080p 地址下载到 eval/media/daihuo/
+# 真值来源：人工逐镜目测（2026-11-04，按 decompose 切出的镜头逐个看联系表）+ 视频作者自述的制作流程；没有生产记录，属于目测真值。
+videos:
+  - id: daihuo_ai_tutorial
+    path: eval/media/daihuo/chenxi_ai_daihuo.mp4
+    source: 抖音 晨曦的好物铺子《AI带货新玩法，真人日用品带货视频，制作流程分享》aweme 7643393488632974633；作者口述：豆包写提示词 → 即梦 Seedance 2.0 用「提前录好的出镜画面」做主体 + 两张水杯图生成
+    # 1.93–6.63 和 49.13–57.67 是同一段即梦成片（右下角「即梦 @知遇」水印，礼盒英文乱码）；7.93–11.93 是口播上叠商品照片的画中画版式；11.93–49.13 是相机拍真实手机屏幕（不是录屏）
+    segments:
+      - [0.000, 1.933, live_action]
+      - [1.933, 6.633, ai_video]
+      - [6.633, 7.933, live_action]
+      - [7.933, 11.933, [live_action, static_hold, still_motion]]
+      - [11.933, 49.133, [live_action, screen_capture]]
+      - [49.133, 57.667, ai_video]
+    real_material: [[0.000, 1.933, true], [1.933, 6.633, false], [6.633, 49.133, true], [49.133, 57.667, false]]
+    audio: {voice: true, music: true, voice_source: human_recording}
+    aspects: {format: {format: [desk, talking_head]}}   # 口播 3 秒 + 37 秒俯拍手机演示，桌拍为主
+
+  - id: daihuo_unboxing
+    path: eval/media/daihuo/ami_unboxing.mp4
+    source: 抖音 阿咪🍓《开箱vlog：）爽拆可爱貌美家居好物～》aweme 7696830364081218747；头顶俯拍支架 + 手机，沉浸式拆包无口播
+    label: live_action
+    real_material: true
+    audio: {voice: false, music: true}   # 只有拆包同期声和 BGM，没有口播；工具把同期声判成了"人声"
+    aspects: {framing: {camera_angle: [顶拍, 俯拍]}, lighting: {setup: [soft_front, high_key]}, format: {format: [desk, product]}}

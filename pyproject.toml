@@ -8,17 +8,19 @@ version = "0.1.0"
 description = "Reverse engineer any video: shot-level production-method forensics (live action / AI video / code render / mixed) and remake planning."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 dependencies = [
-  "numpy>=1.24",
-  "opencv-python-headless>=4.8",
+  "numpy>=1.24,<3",
+  "opencv-python-headless>=4.8,<5",
   "Pillow>=9.0",
   "PyYAML>=6.0",
   "onnxruntime>=1.16",   # 人声/配乐分离（UVR MDX-Net，首次运行自动下载约 67 MB 模型）
 ]
 
 [project.optional-dependencies]
-ocr = ["rapidocr-onnxruntime>=1.3"]
+# rapidocr 会顺带装 opencv-python（带 GUI 的那套），和上面的 headless 抢同一个 cv2 目录；
+# scripts/install_skill.sh 装完会删掉它、重装 headless。手动安装见 setup.md。
+ocr = ["rapidocr-onnxruntime>=1.3,<2"]
 dev = ["pytest>=7", "jsonschema>=4"]
 
 [project.scripts]

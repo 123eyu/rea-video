@@ -32,7 +32,7 @@ VLM（能看图的多模态模型）建议配，不强制，配置方法也在 `
 # ⓪ 先看记住了什么：用户偏好（默认引擎、是否开 VLM、给你的偏好说明）和常见纠正类型
 rea-video memory
 # ① 拆解（产出 out/<名>/breakdown.json、report.html、report.md、storyboard.jpg、audio.png、shots/、stems/）
-rea-video --env-file <你的 .env> decompose ref.mp4 -o out/ref --vlm   # 没有 VLM 配置就去掉 --env-file 和 --vlm；字幕/花字是日文就加 --ocr-lang ja
+rea-video --env-file <你的 .env> decompose ref.mp4 -o out/ref --vlm --lang <zh|en>   # --lang 按用户提问的语言选（见「交付给用户」）；没有 VLM 配置就去掉 --env-file 和 --vlm；字幕/花字是日文就加 --ocr-lang ja
 # ② 看紧凑摘要：低置信镜头会被标出；先看 VLM: 那一行确认 VLM 是否生效
 rea-video summary out/ref/breakdown.json
 ```
@@ -41,7 +41,8 @@ rea-video summary out/ref/breakdown.json
 
 ```bash
 rea-video review out/ref                      # 写出 review_tasks.json（每镜要看的图、工具判断、优先级）和 review_answers.json（答案模板）
-# 读 review_tasks.json 的 instructions，逐镜看 images 里的图（priority=high 必看），把 label_probs / evidence / description / embedded_assets 填进 review_answers.json
+# 读 review_tasks.json 的 instructions，逐镜看 images 里的图（priority=high 必看），把 label_probs / evidence / description / embedded_assets 填进 review_answers.json；若某镜头实为多刀合并（暗底图形与暗底口播交替时容易被合成一个长镜头），可加 split_suggestion（cuts 切点秒数 + labels 各段类别 + note），报告会在该镜头标注拆分建议，镜头边界本身不变
+# 顶层 cast 填整片的角色 / 场景 / 道具（同一个角色跨镜头认成同一个，外观写到能据此复刻）和一句视觉风格；没开 VLM 时报告的「角色、场景与道具」一节全靠这里
 rea-video apply-review out/ref --by <你的名字>  # 并入：重写 breakdown.json、report.md、report.html，打印改判了哪些镜头
 rea-video summary out/ref/breakdown.json      # 用并入后的结果写回复
 ```
@@ -57,24 +58,31 @@ rea-video summary out/ref/breakdown.json      # 用并入后的结果写回复
    - 打开 `shots/shot_XXX.jpg`（首、中、尾联系表）。
    - 必要时抽帧细看：`rea-video tiles ref.mp4 --start 12.3 --end 13.1 --every 0.1 -o out/ref/check.jpg`。
    - 按 `references/taxonomy.md` 的"易混对照表"逐条核对。
-3. 声音按 `references/audio.md` 复核：先听 `stems/vocals.wav`（人声干声）和 `stems/music.wav`（配乐），再看 `rea-video summary` 里的"声音来源"一行（视频类型 → 人声 / 音乐 / 音效来源）。信号层面检出的音效只是**低置信候选**，音效清单以 VLM 听到的为准；没开 VLM 时要说明"轻音效可能漏检"。
-4. **实拍（口播 / 桌拍 / vlog / 商品）**：`rea-video summary` 末尾按维度列出「取景 / 机位 / 打光 / 剪辑 / 形式」（`report.md`「拍法、打光与剪辑」一节，含复刻拍摄方案和器材）。
+3. 角色与场景：`rea-video summary` 的「角色 / 场景」几行（`report.md`「角色、场景与道具」一节）。核对同一个角色有没有被 VLM 认成几个（逐镜描述里叫法不一致是常见问题），复刻时每个角色固定一张参考图贯穿所有生成单元；不对就在 `review_answers.json` 顶层 `cast` 里改。
+4. 声音按 `references/audio.md` 复核：先听 `stems/vocals.wav`（人声干声）和 `stems/music.wav`（配乐），再看 `rea-video summary` 里的"声音来源"一行（视频类型 → 人声 / 音乐 / 音效来源）。信号层面检出的音效只是**低置信候选**，音效清单以 VLM 听到的为准；没开 VLM 时要说明"轻音效可能漏检"。
+5. **实拍（口播 / 桌拍 / vlog / 商品）**：`rea-video summary` 末尾按维度列出「取景 / 机位 / 打光 / 剪辑 / 形式」（`report.md`「拍法、打光与剪辑」一节，含复刻拍摄方案和器材）。
    工具在画面主体上测量：有人脸用人脸，没有人脸（桌拍、商品、手）用画面里最清晰的区域，后者的景别是估算。
    看图时在 `review_answers.json` 每镜的 `aspects` 和顶层 `aspects` 里补像素测不出的：机位角度、自拍还是支架、主光是什么光源、眼神光、轮廓光/背景灯、画面里的光源、推测设备、视频形式。报告里测量、VLM、看图三个来源并列，不平均。
    注意：平台转码会压暗部，软硬和补光的测量偏保守。AI / 3D 画面也会给光影描述，但标明「不是拍摄方案」，只用于写生成提示词。
-5. 真实素材按 `references/materials.md` 复核：代码模板里嵌入的截图和照片，确定性检测能找出大部分，但**暗色、半透明的背景照片会漏**。
-6. 剪辑包装（`rea-video summary` 的「包装:」几行，`report.md`「剪辑包装层」一节，文件在 `packaging/`）：
+6. 真实素材按 `references/materials.md` 复核：代码模板里嵌入的截图和照片，确定性检测能找出大部分，但**暗色、半透明的背景照片会漏**。
+7. 剪辑包装（`rea-video summary` 的「包装:」几行，`report.md`「剪辑包装层」一节，文件在 `packaging/`）：
    - 字幕时间轴和样式是测出来的，一般可信；字体是什么要你看图补（工具只给颜色、描边、底框、字高）。
    - 贴纸：标了「需要看图确认」的，看 `packaging/sticker_XX.jpg` 和 `review_tasks.json` 里的 `frame_cmd`，在 `review_answers.json` 的 `packaging.stickers` 里填 `is_overlay` 和 `what`；工具漏掉的写进 `packaging.missed`。3D / 动画 / 版式画面里突然出现的物体工具不算贴纸，你看到是后期贴的再补。
    - 花字和标签分错类时在 `packaging.text` 里改 `kind`。
    - 音效「对应画面」一列是按时间就近对齐的，没开 VLM 时补出的候选（来源 `deterministic_anchored`）实测只有约四成是真音效，写成"可能"。
-7. 如果你的判断和工具不同，以你的复核为准，在回复里写明理由；有价值的话，建议用户把这条视频加进评测集（仓库 `docs/dev/evaluation.md`）。
+8. 第 3、5、6、7 步改了 `review_answers.json` 的，改完**再跑一次** `rea-video apply-review out/ref --by <你的名字>`，否则这些修改进不了报告。
+9. 如果你的判断和工具不同，以你的复核为准，在回复里写明理由；有价值的话，建议用户把这条视频加进评测集（仓库 `docs/dev/evaluation.md`）。
 
 用户指出判错或说出长期偏好时，按 `references/memory.md` 记下来（`rea-video correct` / `rea-video prefs`）。
 
 ## 2. 交付给用户
 
-按 `references/output-template.md` 回复：先一句话结论，再复刻方案（按生成单元 / 拍摄场次组织），然后分镜表、剪辑包装、声音、真实素材清单、不确定点，最后给 `report.html` 路径。不要把 breakdown.json 整段贴进对话。
+按 `references/output-template.md` 回复：先一句话结论，再内容与角色（这条视频讲什么、主要角色和场景），然后复刻方案（按生成单元 / 拍摄场次组织）、分镜表、剪辑包装、声音、真实素材清单、不确定点，最后给 `report.html` 路径。不要把 breakdown.json 整段贴进对话。
+
+**报告和回复都用用户的语言。**语言的判断顺序：用户明确指定的语言（「用英文出报告」「report in Chinese」）> 用户提问所用的语言 > `rea-video memory` 里的 `lang` 偏好 > 中文。
+- 工具支持 `--lang zh` 和 `--lang en`：`decompose` 时就传对，报告文件（`report.html` / `report.md`）、`summary` 输出、VLM 的画面描述和提示词都会是该语言；忘了传可以在 `apply-review out/ref --lang en` 时补上（会重新生成结论和报告文字；VLM 已写好的描述和提示词保持原语言）。看图复核时，`review_answers.json` 里的 evidence / description / prompt 也用这个语言写。
+- 用户用日语、韩语等工具不支持的语言提问时，跑 `--lang en`，回复用用户的语言写；用户要该语言的报告文件时，把 `report.md` 翻译成 `report_<语言>.md` 放在同一目录，并说明 `report.html` 是英文的。
+- 用户设了长期偏好（「以后都出英文报告」）就 `rea-video prefs lang en` 记下来。
 
 ## 3. 复刻（需要时）
 
@@ -93,7 +101,7 @@ rea-video summary out/ref/breakdown.json      # 用并入后的结果写回复
 | `references/remake.md` | 复刻、对接 capsule-cinema |
 | `references/memory.md` | 记住纠正和偏好 |
 
-## 5. 不要做的事
+## 4. 不要做的事
 
 - 不要只凭画风判断。卡通 3D 风格既可能是 AI 视频，也可能是 Blender 渲染，要看形变、闪烁和几何稳定性。
 - 不要把代码渲染画面里的文字算成"叠加层"，那些文字就是画面本身。

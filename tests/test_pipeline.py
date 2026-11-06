@@ -102,3 +102,24 @@ def test_remake_jobs_and_assemble(breakdown, tmp_path):
     assert Path(res["remake"]).is_file() and Path(res["compare"]).is_file()
     info = video_info(res["remake"])
     assert abs(info.duration - b["source"]["duration"]) < 0.2
+
+
+def test_english_report_has_no_chinese(media, tmp_path):
+    import re
+
+    from rea_video.i18n import set_lang
+
+    try:
+        b = decompose(media["edit"], tmp_path / "en", use_vlm=False, ocr=False, stems=False, lang="en")
+        assert b["lang"] == "en"
+        assert b["shots"][0]["base"]["label_zh"] == "static hold"
+        cjk = re.compile(r"[一-鿿]")
+        for name in ("report.md", "report.html"):
+            bad = [l for l in (tmp_path / "en" / name).read_text().splitlines() if cjk.search(l)]
+            assert not bad, f"{name} still has Chinese lines:\n" + "\n".join(bad[:20])
+        # the same breakdown rendered again in Chinese
+        b["lang"] = "zh"
+        again = finalize(b, tmp_path / "en")
+        assert again["shots"][0]["base"]["label_zh"] == "静帧停留"
+    finally:
+        set_lang("zh")

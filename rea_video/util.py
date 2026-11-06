@@ -43,6 +43,16 @@ def _json_default(value: Any) -> Any:
     return str(value)
 
 
+def sha256_file(path: Path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with Path(path).open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
 def load_env_files(paths: Iterable[str | Path]) -> list[str]:
     """Minimal .env loader (KEY=VALUE lines). Existing env vars win. Returns loaded files."""
     loaded: list[str] = []

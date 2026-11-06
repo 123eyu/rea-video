@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ..i18n import T
+
 # shots whose picture is photographic enough for camera / light analysis. Live action gets a shooting plan; AI, 3D
 # and avatar shots get the same measurements as a description of the picture (useful for generation prompts).
 PHOTOGRAPHIC = ("live_action", "avatar", "ai_video", "cg_3d", "stop_motion")
@@ -29,9 +31,10 @@ FILMED = ("live_action", "avatar", "stop_motion")
 @dataclass
 class Field:
     key: str
-    zh: str
+    zh: str                       # label; reads as `en` when the report language is English (see _lang_attr)
     question: str                 # shown to the VLM / reviewer; empty = measured only
     prefer: str = "measured"      # "measured" | "seen"
+    en: str = ""
 
 
 @dataclass
@@ -46,7 +49,8 @@ class ShotCtx:
 @dataclass
 class Aspect:
     key: str = ""
-    title: str = ""
+    title: str = ""               # reads as `title_en` when the report language is English
+    title_en: str = ""
     shot_fields: list[Field] = field(default_factory=list)
     video_fields: list[Field] = field(default_factory=list)
 
@@ -71,6 +75,19 @@ class Aspect:
         return out
 
 
+def _lang_attr(cls, name: str, en_name: str) -> None:
+    """Make `cls.<name>` (set once, in Chinese) read as `cls.<en_name>` when the report language is English."""
+    def get(self):
+        return T(self.__dict__[name], self.__dict__.get(en_name) or None)
+
+    def set(self, v):
+        self.__dict__[name] = v
+    setattr(cls, name, property(get, set))
+
+
+_lang_attr(Field, "zh", "en")
+_lang_attr(Aspect, "title", "title_en")
+
 REGISTRY: list[Aspect] = []
 
 
@@ -92,7 +109,7 @@ def seen(shot: dict, aspect: str, field_key: str) -> dict[str, str]:
     for src, rk in (("agent", "review"), ("vlm", "vlm")):
         r = shot.get(rk) or {}
         v = ((r.get("aspects") or {}).get(aspect) or {}).get(field_key) or (r.get("cinematography") or {}).get(field_key)
-        if v and str(v).strip() not in ("不适用", "unknown", "无法判断"):
+        if v and str(v).strip().lower() not in ("不适用", "unknown", "无法判断", "n/a", "not applicable"):
             out[src] = str(v).strip()
     return out
 

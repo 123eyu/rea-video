@@ -11,6 +11,8 @@ numpy only (no librosa/scipy):
 - edit: do cuts land on beats / onsets?"""
 from __future__ import annotations
 
+from .i18n import LangDict, T, join, semi
+
 import numpy as np
 
 from .media import extract_audio
@@ -22,8 +24,10 @@ T_HOP = HOP / SR
 _KS_MAJOR = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
 _KS_MINOR = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
 _NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-SFX_TYPE_ZH = {"whoosh": "嗖/转场呼啸", "ding": "叮/提示音", "pop": "啵/弹出", "click": "咔哒/点击", "impact": "重击/低频冲击",
-               "typing": "打字/连续点击", "hit": "打点/敲击"}
+SFX_TYPE_ZH = LangDict({"whoosh": "嗖/转场呼啸", "ding": "叮/提示音", "pop": "啵/弹出", "click": "咔哒/点击", "impact": "重击/低频冲击",
+                        "typing": "打字/连续点击", "hit": "打点/敲击"},
+                       en={"whoosh": "whoosh / transition swish", "ding": "ding / notification", "pop": "pop", "click": "click",
+                           "impact": "impact / low-end hit", "typing": "typing / rapid clicks", "hit": "hit / tap"})
 
 
 def _stft(x: np.ndarray) -> np.ndarray:
@@ -435,28 +439,31 @@ def merge_audio_with_vlm(audio: dict, whole: dict | None) -> dict:
     plan = []
     if voice.get("present") or n.get("type") in ("tts", "human", "mixed"):
         plan.append({"track": "voice", "rule": "A01-narration" if n.get("type") != "human" else "A01-narration",
-                     "what": f"{'TTS 旁白' if n.get('type') == 'tts' else ('真人口播/对白' if n.get('type') == 'human' else '人声')}"
-                             f"，{n.get('voice') or voice.get('gender_hint') or ''}，{n.get('style') or ''}".strip("，"),
-                     "how": "capsule-cinema DoubaoTTSTool / UniversalTTSTool（或 MiniMax 克隆音色）；需要卡原时间窗时用时长可控 TTS（A02）",
+                     "what": (T("TTS 旁白", "TTS voice-over") if n.get('type') == 'tts' else (T("真人口播/对白", "human talking head / dialogue") if n.get('type') == 'human' else T("人声", "voice"))
+                             + f"{T('，', ', ')}{n.get('voice') or voice.get('gender_hint') or ''}{T('，', ', ')}{n.get('style') or ''}").strip(T("，", ", ")),
+                     "how": T("capsule-cinema DoubaoTTSTool / UniversalTTSTool（或 MiniMax 克隆音色）；需要卡原时间窗时用时长可控 TTS",
+                              "capsule-cinema DoubaoTTSTool / UniversalTTSTool (or a MiniMax cloned voice); use duration-controlled TTS when it must fit the original time window"),
                      "segments": voice.get("segments", [])[:40], "lines": n.get("lines", [])[:60],
                      "real_material": n.get("type") == "human"})
     if music.get("present") or m.get("present"):
         src = m.get("source_guess") or "unknown"
         plan.append({"track": "music", "rule": "A03-music",
-                     "what": "；".join(x for x in [m.get("style") or m.get("genre") or "", m.get("mood") or "",
+                     "what": semi().join(x for x in [m.get("style") or m.get("genre") or "", m.get("mood") or "",
                                                    f"{music.get('tempo_bpm') or m.get('bpm_estimate') or '?'} BPM",
                                                    (f"{music['key']['tonic']} {music['key']['mode']}" if music.get("key") else "")] if x),
-                     "how": ("疑似知名歌曲，需要授权或换成风格相近的授权曲/生成曲" if src == "popular_song" else
-                             "capsule-cinema UniversalMusicGenerationTool（Suno）或曲库：按 BPM/调性/情绪选曲，在段落变化点对齐镜头"),
+                     "how": (T("疑似知名歌曲，需要授权或换成风格相近的授权曲/生成曲", "Possibly a well-known song: needs a licence, or swap in a licensed / generated track in a similar style") if src == "popular_song" else
+                             T("capsule-cinema UniversalMusicGenerationTool（Suno）或曲库：按 BPM/调性/情绪选曲，在段落变化点对齐镜头",
+                               "capsule-cinema UniversalMusicGenerationTool (Suno) or a stock library: pick by BPM / key / mood and line up the shots with the section changes")),
                      "segments": music.get("segments", []), "section_changes": music.get("section_changes", []),
                      "source_guess": src, "song_guess": m.get("song_guess", ""),
                      "beat_synced_cuts": bool(audio.get("beat_synced_edit") or m.get("beat_synced_cuts"))})
     if sfx:
-        plan.append({"track": "sfx", "rule": "A04-sfx", "what": f"{len(sfx)} 个音效",
-                     "how": "按时间点摆放：capsule-cinema SoundEffectsTool / 音效库，或像 plush 配方那样程序合成（音高对齐 BGM 调性）",
+        plan.append({"track": "sfx", "rule": "A04-sfx", "what": T("{n} 个音效", "{n} SFX", n=len(sfx)),
+                     "how": T("按时间点摆放：capsule-cinema SoundEffectsTool / 音效库，或像 plush 配方那样程序合成（音高对齐 BGM 调性）",
+                              "Place by timestamp: capsule-cinema SoundEffectsTool / an SFX library, or synthesise procedurally like the plush recipe (pitched to the music key)"),
                      "events": sfx[:200]})
     if whole.get("ambience"):
-        plan.append({"track": "ambience", "rule": "A04-sfx", "what": whole["ambience"], "how": "环境声素材或视频生音效模型"})
+        plan.append({"track": "ambience", "rule": "A04-sfx", "what": whole["ambience"], "how": T("环境声素材或视频生音效模型", "Ambience stock or a video-to-audio model")})
     return {"sfx_merged": sfx[:300], "plan": plan, "mix": whole.get("mix", "")}
 
 

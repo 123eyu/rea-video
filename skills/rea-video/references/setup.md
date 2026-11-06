@@ -8,6 +8,12 @@ pip install "rea-video[ocr] @ git+https://github.com/JuneYaooo/rea-video"   # �
 rea-video --help
 ```
 
+pip 报 `externally-managed-environment`（Homebrew / 新版 Ubuntu 的系统 Python）时，不要加 `--break-system-packages`，改用
+`pipx install "rea-video[ocr] @ git+https://github.com/JuneYaooo/rea-video"`，或直接跑 `install_skill.sh`（会自动改用 pipx 或仓库内 `.venv`）。
+
+手动装了 `[ocr]` 时，OCR 依赖会再装一套 `opencv-python`，和 rea-video 用的 `opencv-python-headless` 抢同一个 `cv2` 目录。装完跑一次：
+`pip uninstall -y opencv-python && pip install --force-reinstall --no-deps "opencv-python-headless>=4.8,<5"`（`install_skill.sh` 会自动做）。
+
 ## VLM 配置（建议，不强制）
 
 **VLM（建议配置，不强制）**：VLM 是能看图/看视频的多模态大模型（Gemini、GPT-4o、豆包、Qwen-VL 等）。不开 VLM，工具只靠像素统计、帧率、OCR、元数据判断，照样能跑完、出报告，但**实拍 / AI / 3D 的区分明显变弱**，音效清单也只有信号层的低置信候选。开了 VLM，工具会把每个镜头的短片段和关键帧发给它，再和确定性结果融合。

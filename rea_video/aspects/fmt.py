@@ -8,16 +8,22 @@
 The image readers' answer to `format` wins when present."""
 from __future__ import annotations
 
+from ..i18n import LangDict, T, join, semi
+
 from .base import FILMED, Aspect, Field, field_table, register, video_seen
 
-FORMAT_ZH = {"talking_head": "人物口播", "desk": "桌面/物品拍摄（桌拍）", "product": "手持拍物品（开箱/带货/第一视角）",
-             "vlog": "vlog 随拍", "other": "其他实拍"}
+FORMAT_ZH = LangDict({"talking_head": "人物口播", "desk": "桌面/物品拍摄（桌拍）", "product": "手持拍物品（开箱/带货/第一视角）",
+                      "vlog": "vlog 随拍", "other": "其他实拍"},
+                     en={"talking_head": "talking head", "desk": "tabletop / object shoot", "product": "handheld product shots (unboxing / selling / POV)",
+                         "vlog": "vlog", "other": "other live footage"})
+# camera-angle answers (either language) that mean the camera looks down at a desk
+ABOVE_WORDS = ("顶拍", "俯拍", "top-down", "top down", "overhead", "high angle", "high-angle", "bird")
 
 
 class Format(Aspect):
     def __init__(self):
-        super().__init__(key="format", title="形式", video_fields=[
-            Field("format", "视频形式", "单人口播|访谈|桌面俯拍/开箱/教程|vlog 跟拍|商品展示|剧情|无实拍", prefer="seen"),
+        super().__init__(key="format", title="形式", title_en="Format", video_fields=[
+            Field("format", "视频形式", "单人口播|访谈|桌面俯拍/开箱/教程|vlog 跟拍|商品展示|剧情|无实拍", prefer="seen", en="video format"),
         ])
 
     def summarize(self, shots: list[dict], b: dict) -> dict:
@@ -34,7 +40,7 @@ class Format(Aspect):
 
         face = share(lambda r: asp(r, "framing").get("subject") == "face")
         focus = share(lambda r: asp(r, "framing").get("subject") == "focus")
-        from_above = share(lambda r: any(w in (asp(r, "framing").get("camera_angle") or "") for w in ("顶拍", "俯拍")))
+        from_above = share(lambda r: any(w in (asp(r, "framing").get("camera_angle") or "").lower() for w in ABOVE_WORDS))
         fixed = share(lambda r: asp(r, "camera").get("support") == "fixed")
         handheld = share(lambda r: asp(r, "camera").get("support") in ("handheld", "moving"))
         speech = bool(((b.get("audio") or {}).get("voice") or {}).get("present"))
@@ -50,8 +56,9 @@ class Format(Aspect):
         else:
             kind = "other"
         seen = video_seen(b, self.key, "format")
-        lines = [f"形式：{FORMAT_ZH[kind]}（人脸为主体 {face:.0%}、物品/手为主体 {focus:.0%}、手持 {handheld:.0%}）"
-                 + (f"；看图判断：{seen.get('agent') or seen.get('vlm')}" if seen else "")]
+        lines = [T("形式：{f}（人脸为主体 {a:.0%}、物品/手为主体 {b:.0%}、手持 {c:.0%}）", "Format: {f} (face as subject {a:.0%}, objects / hands as subject {b:.0%}, handheld {c:.0%})",
+                   f=FORMAT_ZH[kind], a=face, b=focus, c=handheld)
+                 + (semi() + T("看图判断：{s}", "image readers: {s}", s=seen.get("agent") or seen.get("vlm")) if seen else "")]
         return {"result": {"format": kind}, "shares": {"face": round(face, 3), "focus": round(focus, 3), "from_above": round(from_above, 3),
                                                         "fixed": round(fixed, 3), "handheld": round(handheld, 3)},
                 "lines": lines, "fields": field_table(self, filmed, b, {"format": FORMAT_ZH[kind]})}

@@ -87,7 +87,7 @@ def assemble(breakdown_path: Path, results_path: Path, out_dir: Path | None = No
     parts, legend = [], []
     for sh in b["shots"]:
         dur = sh["duration"]
-        seg = seg_dir / f"{sh['id']}.mp4"
+        seg = seg_dir / f"shot_{int(sh['index']):03d}.mp4"  # 不用 JSON 里的 id 拼路径，防 ../
         res = results.get(str(sh["index"])) or {}
         job = jobs.get(sh["index"], {})
         if res.get("video") and Path(res["video"]).is_file():
@@ -104,7 +104,7 @@ def assemble(breakdown_path: Path, results_path: Path, out_dir: Path | None = No
             legend.append((sh["index"], "original"))
         parts.append(seg)
     lst = seg_dir / "concat.txt"
-    lst.write_text("".join(f"file '{p.resolve()}'\n" for p in parts), encoding="utf-8")
+    lst.write_text("".join("file '" + str(p.resolve()).replace("'", "'\\''") + "'\n" for p in parts), encoding="utf-8")
     silent = out_dir / "remake_silent.mp4"
     _ff(["-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(silent)])
     final = out_dir / "remake.mp4"

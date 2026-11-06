@@ -13,6 +13,9 @@ rea-video --help
 bash scripts/install_skill.sh    # 可选：装 CLI 并把 skill 链接到 ~/.claude/skills、~/.codex/skills、~/.agents/skills
 ```
 
+手动装了 `[ocr]` 时，OCR 依赖会再装一套 `opencv-python`，和 rea-video 用的 `opencv-python-headless` 抢同一个 `cv2` 目录。装完跑一次：
+`pip uninstall -y opencv-python && pip install --force-reinstall --no-deps "opencv-python-headless>=4.8,<5"`（`install_skill.sh` 会自动做）。
+
 Claude Code 也可以按插件装 skill（CLI 仍需 `pip install`，skill 第一步会检查）：
 
 ```text
@@ -65,7 +68,7 @@ rea-video stems ref.mp4 -o out/ref
 ## 和 capsule-cinema 一起复刻
 
 ```bash
-CC=~/code/github/capsule-cinema   # capsule-cinema 仓库，也可以设 CAPSULE_CINEMA_ROOT
+CC=~/code/github/capsule-cinema   # capsule-cinema 仓库；也可以设 CAPSULE_CINEMA_ROOT，或 rea-video prefs capsule_root $CC 设一次，之后不用再带 --capsule-root
 rea-video remake-plan out/ref/breakdown.json --capsule-root $CC                  # AI 类镜头 → 首尾帧生成任务
 rea-video remake-run out/ref/remake/jobs.json                                    # 调 capsule-cinema 生成（会计费，可先 --dry-run）
 rea-video assemble out/ref/breakdown.json out/ref/remake/results.json            # 按原时间线拼回 + 对比片
@@ -82,11 +85,11 @@ rea-video capsule-draft out/ref/breakdown.json --capsule-root $CC --capsule-name
 
 | 命令 | 作用 |
 |---|---|
-| `decompose VIDEO [--vlm] [--no-ocr] [--ocr-lang zh\|ja] [--no-packaging]` | 拆解，输出 breakdown.json、report.html/md、storyboard.jpg、每镜首尾帧，以及 `packaging/`（字幕 SRT、带样式的 ASS、包装时间轴、贴纸截图）；`--no-packaging` 跳过包装层（省约每分钟 30–50 秒）；`--ocr-lang ja` 用日文识别模型读字幕和花字（首次使用自动下载约 10 MB 到 `$REA_VIDEO_MODELS`，离线时可用 `$REA_OCR_REC_MODEL` 指向本地模型），`rea-video prefs ocr_lang ja` 可设成默认 |
+| `decompose VIDEO [--vlm] [--no-ocr] [--ocr-lang zh\|ja] [--lang zh\|en] [--no-packaging]` | 拆解，输出 breakdown.json、report.html/md、storyboard.jpg、每镜首尾帧，以及 `packaging/`（字幕 SRT、带样式的 ASS、包装时间轴、贴纸截图）；`--lang en` 让结论、报告、`summary` 输出和 VLM 描述都用英文（默认中文；agent 按用户提问的语言选，`rea-video prefs lang en` 可设成默认；breakdown.json 里的 `*_zh` 字段名保留，内容跟报告语言走）；`--no-packaging` 跳过包装层（省约每分钟 30–50 秒）；`--ocr-lang ja` 用日文识别模型读字幕和花字（首次使用自动下载约 10 MB 到 `$REA_VIDEO_MODELS`，离线时可用 `$REA_OCR_REC_MODEL` 指向本地模型），`rea-video prefs ocr_lang ja` 可设成默认 |
 | `review OUT_DIR` | 给能看图的 agent 生成逐镜看图任务（review_tasks.json）和答案模板（review_answers.json） |
-| `apply-review OUT_DIR [ANSWERS] [--by NAME]` | 把 agent 看图的答案和确定性结果融合，重写 breakdown.json 和报告 |
+| `apply-review OUT_DIR [ANSWERS] [--by NAME] [--lang zh\|en]` | 把 agent 看图的答案和确定性结果融合，重写 breakdown.json 和报告；`--lang` 可以在这一步换报告语言（结论、证据和报告文字重新生成，VLM 已写好的描述和提示词保持原语言） |
 | `correct OUT_DIR --shots N --label L [--real yes/no] [--note]` | 用户指出判错：改正结论和报告，并记入记忆（以后同一文件自动套用，同类镜头复核时提示） |
-| `prefs [KEY VALUE] [--note TEXT]` | 用户偏好：默认引擎、是否默认开 VLM、VLM 配置文件、复核者名字、给 agent 的自由文字说明 |
+| `prefs [KEY VALUE] [--note TEXT]` | 用户偏好：默认引擎、是否默认开 VLM、VLM 配置文件、复核者名字、报告语言（`lang zh\|en`）、给 agent 的自由文字说明 |
 | `memory [--export-labels YAML]` | 看记住了什么（偏好、常见纠正类型）；把纠正导出成评测样本 |
 | `probe VIDEO` | 只看元数据线索（拍摄设备、AIGC 隐式标识、C2PA、编辑器签名） |
 | `summary breakdown.json` | 紧凑打印结论，标出需要复核的低置信镜头 |
@@ -94,7 +97,7 @@ rea-video capsule-draft out/ref/breakdown.json --capsule-root $CC --capsule-name
 | `eval labels.yaml` | 在带标注的样本上评测准确率和切点 F1 |
 | `capsule breakdown.json` | 导出 capsule-cinema 的视频分析 JSON |
 | `remake-plan` / `assemble` | 生成复刻任务、拼回成片 |
-| `remake-run JOBS [--dry-run] [--only]` | 用 capsule-cinema 执行复刻任务（会计费） |
+| `remake-run JOBS [--dry-run] [--only 2,5\|shot_002] [--capsule-root]` | 用 capsule-cinema 执行复刻任务（会计费）；有镜头没生成出视频时退出码非 0 |
 | `capsule-draft breakdown.json` | 生成 capsule-cinema 胶囊草稿 |
 
 ## 工作流（设计目标；目前完成到拆解和 AI 镜头复刻）

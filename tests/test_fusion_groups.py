@@ -70,3 +70,17 @@ def test_reader_backing_tools_runner_up_wins_three_way_split():
     assert _majority(rec) == "ai_video"
     seen = {"live_action": 0.5, "ai_video": 0.37, "cg_3d": 0.08}
     assert decide(fuse(det, seen, "dynamic", majority=_majority(rec)))[0] == "ai_video"
+
+
+def test_agent_review_dispute_flags_ai_live_disagreement():
+    # keaton shot_001: tools say ai_video (dark static talking head), the agent review says
+    # live action; the fusion follows the tools by design (eval-calibrated), but the
+    # disagreement must surface as a dispute flag instead of hiding behind the label
+    from rea_video.pipeline import _agent_review_dispute
+
+    note = _agent_review_dispute("ai_video", None, {"live_action": 0.9, "ai_video": 0.05}, False, "fused_agent")
+    assert note and "看图复核" in note
+    # agreement: no flag
+    assert _agent_review_dispute("ai_video", None, {"ai_video": 0.9}, True, "fused_agent") is None
+    # an existing VLM answer means the VLM disputed flag owns this case: stay out of it
+    assert _agent_review_dispute("ai_video", {"live_action": 0.9}, {"live_action": 0.9}, False, "fused_agent") is None

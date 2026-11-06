@@ -7,18 +7,23 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..i18n import LangDict, T, join, semi
+
 from .base import FILMED, PHOTOGRAPHIC, Aspect, Field, ShotCtx, field_table, register, seen, weighted_mode
 
+SIZES = LangDict({"ecu": "大特写", "cu": "特写", "mcu": "近景", "ms": "中景", "fs": "全景", "ls": "远景"},
+                 en={"ecu": "extreme close-up", "cu": "close-up", "mcu": "medium close-up", "ms": "medium shot", "fs": "full shot",
+                     "ls": "wide shot"})
 # face height / frame height
-FACE_SIZES = [(0.40, "大特写"), (0.25, "特写"), (0.14, "近景"), (0.08, "中景"), (0.04, "全景"), (0.0, "远景")]
+FACE_SIZES = [(0.40, "ecu"), (0.25, "cu"), (0.14, "mcu"), (0.08, "ms"), (0.04, "fs"), (0.0, "ls")]
 # in-focus subject area / frame area
-AREA_SIZES = [(0.45, "特写"), (0.22, "近景"), (0.08, "中景"), (0.0, "全景")]
+AREA_SIZES = [(0.45, "cu"), (0.22, "mcu"), (0.08, "ms"), (0.0, "fs")]
 
 
 def size_from(table, v: float | None) -> str | None:
     if v is None:
         return None
-    return next(name for th, name in table if v >= th)
+    return SIZES[next(name for th, name in table if v >= th)]
 
 
 def shot_size(face_h: float | None) -> str | None:
@@ -27,10 +32,10 @@ def shot_size(face_h: float | None) -> str | None:
 
 class Framing(Aspect):
     def __init__(self):
-        super().__init__(key="framing", title="取景", shot_fields=[
-            Field("shot_size", "景别", "特写|近景|中景|全景|远景（按画面主体，人物按头肩/半身/全身）"),
-            Field("camera_angle", "机位角度", "平视|略俯拍|俯拍|顶拍（正上方俯拍桌面）|略仰拍|仰拍", prefer="seen"),
-            Field("composition", "构图", "主体位置与留白（居中/三分线/对称/框中框），竖屏还是横屏", prefer="seen"),
+        super().__init__(key="framing", title="取景", title_en="Framing", shot_fields=[
+            Field("shot_size", "景别", "特写|近景|中景|全景|远景（按画面主体，人物按头肩/半身/全身）", en="shot size"),
+            Field("camera_angle", "机位角度", "平视|略俯拍|俯拍|顶拍（正上方俯拍桌面）|略仰拍|仰拍", prefer="seen", en="camera angle"),
+            Field("composition", "构图", "主体位置与留白（居中/三分线/对称/框中框），竖屏还是横屏", prefer="seen", en="composition"),
         ])
 
     def measure(self, ctx: ShotCtx) -> dict:
@@ -38,7 +43,7 @@ class Framing(Aspect):
         if not subs:
             return {}
         kinds = [s["kind"] for s in subs]
-        kind = max(set(kinds), key=kinds.count)
+        kind = max(dict.fromkeys(kinds), key=kinds.count)
         use = [s for s in subs if s["kind"] == kind]
         hs = [s["box"][3] for s in use]
         cx = float(np.median([s["box"][0] + s["box"][2] / 2 for s in use]))
@@ -53,7 +58,7 @@ class Framing(Aspect):
         elif kind == "focus":
             out["shot_size"] = size_from(AREA_SIZES, area)
             out["shot_size_rough"] = True
-        out["position"] = "居中" if abs(cx - 0.5) < 0.12 else ("偏左" if cx < 0.5 else "偏右")
+        out["position"] = T("居中", "centred") if abs(cx - 0.5) < 0.12 else (T("偏左", "left of centre") if cx < 0.5 else T("偏右", "right of centre"))
         return out
 
     def interpret(self, shot: dict) -> dict:
@@ -73,10 +78,11 @@ class Framing(Aspect):
         size, sizes = weighted_mode([(res[r["index"]].get("shot_size"), r["duration"]) for r in main])
         angle, angles = weighted_mode([(res[r["index"]].get("camera_angle"), r["duration"]) for r in main])
         subj, subjects = weighted_mode([(res[r["index"]].get("subject"), r["duration"]) for r in main])
-        lines = [f"取景：景别 " + ("、".join(f"{k} {v:.0%}" for k, v in list(sizes.items())[:3] if v >= 0.01) or "未测出")
-                 + (f"；机位角度 {angle}" if angle else "")
-                 + {"face": "；主体是人脸（按脸高算景别）", "focus": "；主体是画面清晰区域（没有人脸，景别为估算）",
-                    "frame": "；没找到明确主体"}.get(subj, "")]
+        lines = [T("取景：景别 ", "Framing: shot size ") + (join(f"{k} {v:.0%}" for k, v in list(sizes.items())[:3] if v >= 0.01) or T("未测出", "not measured"))
+                 + (semi() + T("机位角度 {a}", "camera angle {a}", a=angle) if angle else "")
+                 + {"face": semi() + T("主体是人脸（按脸高算景别）", "subject is a face (shot size from face height)"),
+                    "focus": semi() + T("主体是画面清晰区域（没有人脸，景别为估算）", "subject is the in-focus region (no face; shot size is an estimate)"),
+                    "frame": semi() + T("没找到明确主体", "no clear subject found")}.get(subj, "")]
         return {"result": {"shot_size": size, "camera_angle": angle, "subject": subj},
                 "shot_sizes": sizes, "angles": angles, "subjects": subjects, "seconds": round(tot, 2), "lines": lines,
                 "fields": field_table(self, main, b, {"shot_size": size})}

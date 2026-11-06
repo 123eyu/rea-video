@@ -1,0 +1,239 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 738" width="1000" height="738" font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, Noto Sans CJK SC, Source Han Sans SC, Segoe UI, Helvetica, Arial, sans-serif">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker><linearGradient id="gai" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c084fc"/><stop offset="1" stop-color="#6d28d9"/></linearGradient><filter id="sh" x="-5%" y="-5%" width="110%" height="120%"><feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0f172a" flood-opacity="0.10"/></filter></defs>
+<rect width="1000" height="738" rx="18" fill="#ffffff"/>
+<text x="24" y="36" font-size="19" fill="#0f172a" font-weight="800">Ein Beispiel: ein Produktvideo in 5 Shots plus Ton zerlegt, jeder Shot durchläuft vier Schritte</text>
+<text x="24" y="60" font-size="13" fill="#64748b">Waagerecht: ein Shot vom Beleg bis zum Remake-Plan; senkrecht: die Shots eines Schritts im Vergleich</text>
+<rect x="16" y="78" width="968" height="142" rx="12" fill="#f8fafc"/>
+<rect x="16" y="340" width="968" height="132" rx="12" fill="#f8fafc"/>
+<path d="M822,82 V638" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="4 4"/>
+<circle cx="37" cy="104" r="13" fill="#0f172a"/>
+<text x="37" y="109" font-size="13" fill="#fff" font-weight="800" text-anchor="middle">1</text>
+<text x="56" y="109" font-size="14" fill="#0f172a" font-weight="800">Aufteilen</text>
+<text x="24" y="130" font-size="12" fill="#64748b">in Shots schneiden</text>
+<text x="24" y="147" font-size="12" fill="#64748b">Ton in 3 Spuren</text>
+<path d="M37,210 V224" stroke="#64748b" stroke-width="1.6" marker-end="url(#ah)" fill="none"/>
+<circle cx="37" cy="242" r="13" fill="#0f172a"/>
+<text x="37" y="247" font-size="13" fill="#fff" font-weight="800" text-anchor="middle">2</text>
+<text x="56" y="247" font-size="14" fill="#0f172a" font-weight="800">Belege</text>
+<text x="24" y="268" font-size="12" fill="#64748b">Frames messen</text>
+<text x="24" y="285" font-size="12" fill="#64748b">Bilder ansehen</text>
+<text x="24" y="302" font-size="12" fill="#64748b">hinhören</text>
+<path d="M37,334 V348" stroke="#64748b" stroke-width="1.6" marker-end="url(#ah)" fill="none"/>
+<circle cx="37" cy="366" r="13" fill="#0f172a"/>
+<text x="37" y="371" font-size="13" fill="#fff" font-weight="800" text-anchor="middle">3</text>
+<text x="56" y="371" font-size="14" fill="#0f172a" font-weight="800">Urteil</text>
+<text x="24" y="392" font-size="12" fill="#64748b">erst harte Belege</text>
+<text x="24" y="409" font-size="12" fill="#64748b">Konflikte prüfen</text>
+<path d="M37,462 V476" stroke="#64748b" stroke-width="1.6" marker-end="url(#ah)" fill="none"/>
+<circle cx="37" cy="494" r="13" fill="#0f172a"/>
+<text x="37" y="499" font-size="13" fill="#fff" font-weight="800" text-anchor="middle">4</text>
+<text x="56" y="499" font-size="14" fill="#0f172a" font-weight="800">Plan</text>
+<text x="24" y="520" font-size="12" fill="#64748b">gebündelt nach</text>
+<text x="24" y="537" font-size="12" fill="#64748b">Modellfähigkeit</text>
+<clipPath id="ct"><rect x="134" y="90" width="126" height="84" rx="8"/></clipPath><g clip-path="url(#ct)"><rect x="134" y="90" width="126" height="84" fill="#fde7d6"/><rect x="134" y="90" width="126" height="46.2" fill="#fbd3b8"/><path d="M163.0,174 C163.0,146 179.0,142 197.0,142 C215.0,142 231.0,146 231.0,174 Z" fill="#f97316"/><circle cx="197.0" cy="126" r="14" fill="#fed7aa"/><path d="M183.0,124 a14,14 0 0 1 28,0 l0,-4 a14,10 0 0 0 -28,0 Z" fill="#7c2d12"/><rect x="213.0" y="128" width="6" height="12" rx="3" fill="#1f2937"/><path d="M216.0,140 v6" stroke="#1f2937" stroke-width="1.6"/><rect x="148" y="158" width="98" height="10" rx="3" fill="#fff" opacity="0.9"/><rect x="160" y="161" width="74" height="4" rx="2" fill="#f97316"/></g><rect x="134" y="90" width="126" height="84" rx="8" fill="none" stroke="#cbd5e1"/>
+<rect x="272" y="90" width="126" height="84" rx="8" fill="#e2e8f0" stroke="#cbd5e1"/><rect x="313.0" y="98" width="44" height="68" rx="7" fill="#0f172a"/><rect x="316.0" y="104" width="38" height="56" rx="4" fill="#fff"/><rect x="321.0" y="110" width="28" height="5" rx="2" fill="#2563eb"/><rect x="321.0" y="120" width="24" height="3" rx="1.5" fill="#94a3b8"/><rect x="321.0" y="127" width="20" height="3" rx="1.5" fill="#94a3b8"/><rect x="321.0" y="134" width="26" height="3" rx="1.5" fill="#94a3b8"/><rect x="321.0" y="144" width="28" height="9" rx="4" fill="#2563eb"/><path d="M345.0,152 l6,-6 l2,2 l-3,3 l6,0 l0,2 l-6,0 l3,3 l-2,2 Z" fill="#f97316" stroke="#fff" stroke-width="0.8"/>
+<clipPath id="cp1"><rect x="410" y="90" width="126" height="84" rx="8"/></clipPath><g clip-path="url(#cp1)"><rect x="410" y="90" width="126" height="84" fill="url(#gai)"/><ellipse cx="473.0" cy="164" rx="50.400000000000006" ry="8" fill="#581c87" opacity="0.35"/><rect x="462.0" y="112" width="22" height="44" rx="6" fill="#faf5ff" stroke="#c084fc"/><rect x="467.0" y="104" width="12" height="10" rx="2" fill="#a855f7"/><rect x="465.0" y="126" width="16" height="14" rx="2" fill="#c084fc"/><rect x="489.0" y="130" width="26" height="26" rx="3" fill="#fbcfe8" stroke="#ec4899"/><path d="M489.0,142 h26 M502.0,130 v26" stroke="#ec4899" stroke-width="2"/><text x="492.0" y="140" font-size="7" fill="#9d174d" font-family="monospace">ﾎ巿</text><path d="M428,103 Q428,110 435,110 Q428,110 428,117 Q428,110 421,110 Q428,110 428,103 Z" fill="#fff"/><path d="M516,115 Q516,120 521,120 Q516,120 516,125 Q516,120 511,120 Q516,120 516,115 Z" fill="#fff"/><path d="M440,146 Q440,150 444,150 Q440,150 440,154 Q440,150 436,150 Q440,150 440,146 Z" fill="#fff"/></g><rect x="410" y="90" width="126" height="84" rx="8" fill="none" stroke="#cbd5e1"/>
+<clipPath id="cp2"><rect x="548" y="90" width="126" height="84" rx="8"/></clipPath><g clip-path="url(#cp2)"><rect x="548" y="90" width="126" height="84" fill="url(#gai)"/><ellipse cx="611.0" cy="164" rx="50.400000000000006" ry="8" fill="#581c87" opacity="0.35"/><rect x="585.0" y="96" width="52" height="84" rx="12" fill="#faf5ff" stroke="#c084fc"/><rect x="597.0" y="84" width="28" height="18" rx="4" fill="#a855f7"/><rect x="591.0" y="124" width="40" height="28" rx="4" fill="#c084fc"/><rect x="597.0" y="132" width="28" height="4" rx="2" fill="#faf5ff"/><rect x="597.0" y="140" width="18" height="4" rx="2" fill="#faf5ff"/><path d="M564,110 Q564,116 570,116 Q564,116 564,122 Q564,116 558,116 Q564,116 564,110 Z" fill="#fff"/><path d="M656,101 Q656,108 663,108 Q656,108 656,115 Q656,108 649,108 Q656,108 656,101 Z" fill="#fff"/><path d="M648,150 Q648,154 652,154 Q648,154 648,158 Q648,154 644,154 Q648,154 648,150 Z" fill="#fff"/></g><rect x="548" y="90" width="126" height="84" rx="8" fill="none" stroke="#cbd5e1"/>
+<rect x="686" y="90" width="126" height="84" rx="8" fill="#0f172a" stroke="#cbd5e1"/><rect x="700" y="106" width="34" height="8" rx="4" fill="#f59e0b"/><text x="700" y="138" font-size="20" fill="#fff" font-weight="800">50%</text><rect x="700" y="148" width="76" height="4" rx="2" fill="#94a3b8"/><rect x="700" y="156" width="56" height="4" rx="2" fill="#94a3b8"/><rect x="774" y="142" width="6" height="18" fill="#38bdf8"/><rect x="783" y="134" width="6" height="26" fill="#38bdf8"/><rect x="792" y="124" width="6" height="36" fill="#f59e0b"/>
+<rect x="830" y="90" width="152" height="84" rx="8" fill="#f0fdfa" stroke="#cbd5e1"/><text x="838" y="113.33333333333333" font-size="10" fill="#64748b" font-weight="700">Stimme</text><rect x="884.5" y="106.8" width="1.3" height="5.0" rx="1" fill="#f97316"/><rect x="887.0" y="101.0" width="1.3" height="16.6" rx="1" fill="#f97316"/><rect x="889.5" y="105.3" width="1.3" height="8.0" rx="1" fill="#f97316"/><rect x="892.0" y="101.4" width="1.3" height="15.8" rx="1" fill="#f97316"/><rect x="894.5" y="104.0" width="1.3" height="10.8" rx="1" fill="#f97316"/><rect x="897.0" y="102.2" width="1.3" height="14.3" rx="1" fill="#f97316"/><rect x="899.5" y="102.8" width="1.3" height="13.2" rx="1" fill="#f97316"/><rect x="902.0" y="103.2" width="1.3" height="12.2" rx="1" fill="#f97316"/><rect x="904.5" y="101.8" width="1.3" height="15.0" rx="1" fill="#f97316"/><rect x="907.0" y="104.5" width="1.3" height="9.6" rx="1" fill="#f97316"/><rect x="909.5" y="101.2" width="1.3" height="16.2" rx="1" fill="#f97316"/><rect x="912.0" y="106.0" width="1.3" height="6.7" rx="1" fill="#f97316"/><rect x="914.5" y="101.0" width="1.3" height="16.7" rx="1" fill="#f97316"/><rect x="917.0" y="106.2" width="1.3" height="6.3" rx="1" fill="#f97316"/><rect x="919.5" y="101.2" width="1.3" height="16.3" rx="1" fill="#f97316"/><rect x="922.0" y="104.7" width="1.3" height="9.2" rx="1" fill="#f97316"/><rect x="924.5" y="106.8" width="1.3" height="5.0" rx="1" fill="#f97316"/><rect x="927.0" y="106.8" width="1.3" height="5.0" rx="1" fill="#f97316"/><rect x="929.5" y="102.6" width="1.3" height="13.5" rx="1" fill="#f97316"/><rect x="932.0" y="102.3" width="1.3" height="14.0" rx="1" fill="#f97316"/><rect x="934.5" y="103.7" width="1.3" height="11.2" rx="1" fill="#f97316"/><rect x="937.0" y="101.5" width="1.3" height="15.6" rx="1" fill="#f97316"/><rect x="939.5" y="105.1" width="1.3" height="8.4" rx="1" fill="#f97316"/><rect x="942.0" y="101.1" width="1.3" height="16.5" rx="1" fill="#f97316"/><rect x="944.5" y="106.6" width="1.3" height="5.5" rx="1" fill="#f97316"/><rect x="947.0" y="101.0" width="1.3" height="16.6" rx="1" fill="#f97316"/><rect x="949.5" y="105.6" width="1.3" height="7.5" rx="1" fill="#f97316"/><rect x="952.0" y="101.3" width="1.3" height="16.0" rx="1" fill="#f97316"/><rect x="954.5" y="106.8" width="1.3" height="5.0" rx="1" fill="#f97316"/><rect x="957.0" y="102.0" width="1.3" height="14.6" rx="1" fill="#f97316"/><rect x="959.5" y="102.9" width="1.3" height="12.8" rx="1" fill="#f97316"/><rect x="962.0" y="103.0" width="1.3" height="12.6" rx="1" fill="#f97316"/><rect x="964.5" y="101.9" width="1.3" height="14.8" rx="1" fill="#f97316"/><rect x="967.0" y="104.3" width="1.3" height="10.1" rx="1" fill="#f97316"/><rect x="969.5" y="101.3" width="1.3" height="16.1" rx="1" fill="#f97316"/><rect x="972.0" y="105.7" width="1.3" height="7.2" rx="1" fill="#f97316"/><text x="838" y="136.0" font-size="10" fill="#64748b" font-weight="700">Musik</text><rect x="884.5" y="123.7" width="1.3" height="16.7" rx="1" fill="#0d9488"/><rect x="887.0" y="128.0" width="1.3" height="8.0" rx="1" fill="#0d9488"/><rect x="889.5" y="124.5" width="1.3" height="15.0" rx="1" fill="#0d9488"/><rect x="892.0" y="123.9" width="1.3" height="16.3" rx="1" fill="#0d9488"/><rect x="894.5" y="123.7" width="1.3" height="16.7" rx="1" fill="#0d9488"/><rect x="897.0" y="126.0" width="1.3" height="12.0" rx="1" fill="#0d9488"/><rect x="899.5" y="123.7" width="1.3" height="16.6" rx="1" fill="#0d9488"/><rect x="902.0" y="124.9" width="1.3" height="14.2" rx="1" fill="#0d9488"/><rect x="904.5" y="123.7" width="1.3" height="16.7" rx="1" fill="#0d9488"/><rect x="907.0" y="124.5" width="1.3" height="15.1" rx="1" fill="#0d9488"/><rect x="909.5" y="123.9" width="1.3" height="16.2" rx="1" fill="#0d9488"/><rect x="912.0" y="126.6" width="1.3" height="10.8" rx="1" fill="#0d9488"/><rect x="914.5" y="123.7" width="1.3" height="16.7" rx="1" fill="#0d9488"/><rect x="917.0" y="123.7" width="1.3" height="16.6" rx="1" fill="#0d9488"/><rect x="919.5" y="124.9" width="1.3" height="14.1" rx="1" fill="#0d9488"/><rect x="922.0" y="127.8" width="1.3" height="8.3" rx="1" fill="#0d9488"/><rect x="924.5" y="123.7" width="1.3" height="16.7" rx="1" fill="#0d9488"/><rect x="927.0" y="123.9" width="1.3" height="16.2" rx="1" fill="#0d9488"/><rect x="929.5" y="126.7" width="1.3" height="10.6" rx="1" fill="#0d9488"/><rect x="932.0" y="125.9" width="1.3" height="12.3" rx="1" fill="#0d9488"/><rect x="934.5" y="123.7" width="1.3" height="16.7" rx="1" fill="#0d9488"/><rect x="937.0" y="125.0" width="1.3" height="14.0" rx="1" fill="#0d9488"/><rect x="939.5" y="127.8" width="1.3" height="8.5" rx="1" fill="#0d9488"/><rect x="942.0" y="124.4" width="1.3" height="15.3" rx="1" fill="#0d9488"/><rect x="944.5" y="123.7" width="1.3" height="16.7" rx="1" fill="#0d9488"/><rect x="947.0" y="126.8" width="1.3" height="10.5" rx="1" fill="#0d9488"/><rect x="949.5" y="125.8" width="1.3" height="12.4" rx="1" fill="#0d9488"/><rect x="952.0" y="123.7" width="1.3" height="16.6" rx="1" fill="#0d9488"/><rect x="954.5" y="123.7" width="1.3" height="16.7" rx="1" fill="#0d9488"/><rect x="957.0" y="127.7" width="1.3" height="8.6" rx="1" fill="#0d9488"/><rect x="959.5" y="124.3" width="1.3" height="15.3" rx="1" fill="#0d9488"/><rect x="962.0" y="124.0" width="1.3" height="16.1" rx="1" fill="#0d9488"/><rect x="964.5" y="123.7" width="1.3" height="16.7" rx="1" fill="#0d9488"/><rect x="967.0" y="125.7" width="1.3" height="12.6" rx="1" fill="#0d9488"/><rect x="969.5" y="123.7" width="1.3" height="16.6" rx="1" fill="#0d9488"/><rect x="972.0" y="125.1" width="1.3" height="13.8" rx="1" fill="#0d9488"/><text x="838" y="158.66666666666669" font-size="10" fill="#64748b" font-weight="700">SFX</text><rect x="884.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="887.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="889.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="892.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="894.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="897.0" y="146.3" width="1.3" height="16.7" rx="1" fill="#2563eb"/><rect x="899.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="902.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="904.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="907.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="909.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="912.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="914.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="917.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="919.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="922.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="924.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="927.0" y="146.3" width="1.3" height="16.7" rx="1" fill="#2563eb"/><rect x="929.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="932.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="934.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="937.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="939.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="942.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="944.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="947.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="949.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="952.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="954.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="957.0" y="146.3" width="1.3" height="16.7" rx="1" fill="#2563eb"/><rect x="959.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="962.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="964.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="967.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="969.5" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/><rect x="972.0" y="153.9" width="1.3" height="1.5" rx="1" fill="#2563eb"/>
+<rect x="140" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="162" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="184" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="206" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="228" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="250" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<text x="197.0" y="202" font-size="11.5" fill="#64748b" text-anchor="middle">0:00–0:06</text>
+<text x="197.0" y="202" font-size="11" fill="#0f172a"></text>
+<rect x="278" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="300" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="322" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="344" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="366" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="388" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<text x="335.0" y="202" font-size="11.5" fill="#64748b" text-anchor="middle">0:06–0:11</text>
+<text x="335.0" y="202" font-size="11" fill="#0f172a"></text>
+<rect x="416" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="438" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="460" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="482" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="504" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="526" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<text x="473.0" y="202" font-size="11.5" fill="#64748b" text-anchor="middle">0:11–0:16</text>
+<text x="473.0" y="202" font-size="11" fill="#0f172a"></text>
+<rect x="554" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="576" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="598" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="620" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="642" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="664" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<text x="611.0" y="202" font-size="11.5" fill="#64748b" text-anchor="middle">0:16–0:21</text>
+<text x="611.0" y="202" font-size="11" fill="#0f172a"></text>
+<rect x="692" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="714" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="736" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="758" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="780" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<rect x="802" y="180" width="8" height="5" rx="1.5" fill="#cbd5e1"/>
+<text x="749.0" y="202" font-size="11.5" fill="#64748b" text-anchor="middle">0:21–0:24</text>
+<text x="749.0" y="202" font-size="11" fill="#0f172a"></text>
+<rect x="261" y="120" width="10" height="24" fill="#cbd5e1" opacity="0.6"/>
+<rect x="399" y="120" width="10" height="24" fill="#cbd5e1" opacity="0.6"/>
+<rect x="537" y="120" width="10" height="24" fill="#cbd5e1" opacity="0.6"/>
+<rect x="675" y="120" width="10" height="24" fill="#cbd5e1" opacity="0.6"/>
+<text x="906.0" y="202" font-size="11.5" fill="#64748b" text-anchor="middle">ganze Spur 0:00–0:24</text>
+<rect x="134" y="230" width="126" height="26" rx="7" fill="#e2e8f0"/>
+<rect x="134" y="230" width="22" height="26" rx="7" fill="#334155" opacity="0.9"/>
+<rect x="148" y="230" width="8" height="26" fill="#334155" opacity="0.9"/>
+<text x="145" y="248" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">M</text>
+<text x="162" y="247.5" font-size="10.5" fill="#334155" font-weight="600">60fps, nie doppelt</text>
+<rect x="134" y="262" width="126" height="26" rx="7" fill="#e2e8f0"/>
+<rect x="134" y="262" width="22" height="26" rx="7" fill="#334155" opacity="0.9"/>
+<rect x="148" y="262" width="8" height="26" fill="#334155" opacity="0.9"/>
+<text x="145" y="280" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">M</text>
+<text x="162" y="279.5" font-size="10.5" fill="#334155" font-weight="600">Sensorrauschen</text>
+<rect x="134" y="294" width="126" height="26" rx="7" fill="#ede9fe"/>
+<rect x="134" y="294" width="22" height="26" rx="7" fill="#5b21b6" opacity="0.9"/>
+<rect x="148" y="294" width="8" height="26" fill="#5b21b6" opacity="0.9"/>
+<text x="145" y="312" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">S</text>
+<text x="162" y="311.5" font-size="10.5" fill="#5b21b6" font-weight="600">Hände, Text ok</text>
+<rect x="272" y="230" width="126" height="26" rx="7" fill="#e2e8f0"/>
+<rect x="272" y="230" width="22" height="26" rx="7" fill="#334155" opacity="0.9"/>
+<rect x="286" y="230" width="8" height="26" fill="#334155" opacity="0.9"/>
+<text x="283" y="248" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">M</text>
+<text x="300" y="247.5" font-size="10.5" fill="#334155" font-weight="600">Hintergrund fix</text>
+<rect x="272" y="262" width="126" height="26" rx="7" fill="#e2e8f0"/>
+<rect x="272" y="262" width="22" height="26" rx="7" fill="#334155" opacity="0.9"/>
+<rect x="286" y="262" width="8" height="26" fill="#334155" opacity="0.9"/>
+<text x="283" y="280" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">M</text>
+<text x="300" y="279.5" font-size="10.5" fill="#334155" font-weight="600">nur lokal bewegt</text>
+<rect x="272" y="294" width="126" height="26" rx="7" fill="#ede9fe"/>
+<rect x="272" y="294" width="22" height="26" rx="7" fill="#5b21b6" opacity="0.9"/>
+<rect x="286" y="294" width="8" height="26" fill="#5b21b6" opacity="0.9"/>
+<text x="283" y="312" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">S</text>
+<text x="300" y="311.5" font-size="10.5" fill="#5b21b6" font-weight="600">echte App-UI</text>
+<rect x="410" y="230" width="126" height="26" rx="7" fill="#e2e8f0"/>
+<rect x="410" y="230" width="22" height="26" rx="7" fill="#334155" opacity="0.9"/>
+<rect x="424" y="230" width="8" height="26" fill="#334155" opacity="0.9"/>
+<text x="421" y="248" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">M</text>
+<text x="438" y="247.5" font-size="10.5" fill="#334155" font-weight="600">24fps, Dubletten</text>
+<rect x="410" y="262" width="126" height="26" rx="7" fill="#e2e8f0"/>
+<rect x="410" y="262" width="22" height="26" rx="7" fill="#334155" opacity="0.9"/>
+<rect x="424" y="262" width="8" height="26" fill="#334155" opacity="0.9"/>
+<text x="421" y="280" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">M</text>
+<text x="438" y="279.5" font-size="10.5" fill="#334155" font-weight="600">AIGC-Tag</text>
+<rect x="410" y="294" width="126" height="26" rx="7" fill="#ede9fe"/>
+<rect x="410" y="294" width="22" height="26" rx="7" fill="#5b21b6" opacity="0.9"/>
+<rect x="424" y="294" width="8" height="26" fill="#5b21b6" opacity="0.9"/>
+<text x="421" y="312" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">S</text>
+<text x="438" y="311.5" font-size="10.5" fill="#5b21b6" font-weight="600">Text verstümmelt</text>
+<rect x="548" y="230" width="126" height="26" rx="7" fill="#e2e8f0"/>
+<rect x="548" y="230" width="22" height="26" rx="7" fill="#334155" opacity="0.9"/>
+<rect x="562" y="230" width="8" height="26" fill="#334155" opacity="0.9"/>
+<text x="559" y="248" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">M</text>
+<text x="576" y="247.5" font-size="10.5" fill="#334155" font-weight="600">Tools: wirkt 3D</text>
+<rect x="548" y="262" width="126" height="26" rx="7" fill="#ede9fe"/>
+<rect x="548" y="262" width="22" height="26" rx="7" fill="#5b21b6" opacity="0.9"/>
+<rect x="562" y="262" width="8" height="26" fill="#5b21b6" opacity="0.9"/>
+<text x="559" y="280" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">S</text>
+<text x="576" y="279.5" font-size="10.5" fill="#5b21b6" font-weight="600">VLM: wirkt KI</text>
+<rect x="548" y="294" width="126" height="26" rx="7" fill="#fef3c7"/>
+<rect x="548" y="294" width="22" height="26" rx="7" fill="#b45309" opacity="0.9"/>
+<rect x="562" y="294" width="8" height="26" fill="#b45309" opacity="0.9"/>
+<text x="559" y="312" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">S</text>
+<text x="576" y="311.5" font-size="10.5" fill="#b45309" font-weight="600">Widerspruch</text>
+<rect x="686" y="230" width="126" height="26" rx="7" fill="#e2e8f0"/>
+<rect x="686" y="230" width="22" height="26" rx="7" fill="#334155" opacity="0.9"/>
+<rect x="700" y="230" width="8" height="26" fill="#334155" opacity="0.9"/>
+<text x="697" y="248" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">M</text>
+<text x="714" y="247.5" font-size="10.5" fill="#334155" font-weight="600">Hintergrund fix</text>
+<rect x="686" y="262" width="126" height="26" rx="7" fill="#e2e8f0"/>
+<rect x="686" y="262" width="22" height="26" rx="7" fill="#334155" opacity="0.9"/>
+<rect x="700" y="262" width="8" height="26" fill="#334155" opacity="0.9"/>
+<text x="697" y="280" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">M</text>
+<text x="714" y="279.5" font-size="10.5" fill="#334155" font-weight="600">OCR-Textspur</text>
+<rect x="686" y="294" width="126" height="26" rx="7" fill="#ede9fe"/>
+<rect x="686" y="294" width="22" height="26" rx="7" fill="#5b21b6" opacity="0.9"/>
+<rect x="700" y="294" width="8" height="26" fill="#5b21b6" opacity="0.9"/>
+<text x="697" y="312" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">S</text>
+<text x="714" y="311.5" font-size="10.5" fill="#5b21b6" font-weight="600">keine Kameraspur</text>
+<rect x="830" y="230" width="152" height="26" rx="7" fill="#ccfbf1"/>
+<rect x="830" y="230" width="22" height="26" rx="7" fill="#115e59" opacity="0.9"/>
+<rect x="844" y="230" width="8" height="26" fill="#115e59" opacity="0.9"/>
+<text x="841" y="248" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">H</text>
+<text x="858" y="247.5" font-size="10.5" fill="#115e59" font-weight="600">Silben 3–8Hz</text>
+<rect x="830" y="262" width="152" height="26" rx="7" fill="#ccfbf1"/>
+<rect x="830" y="262" width="22" height="26" rx="7" fill="#115e59" opacity="0.9"/>
+<rect x="844" y="262" width="8" height="26" fill="#115e59" opacity="0.9"/>
+<text x="841" y="280" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">H</text>
+<text x="858" y="279.5" font-size="10.5" fill="#115e59" font-weight="600">122 BPM, d-Moll</text>
+<rect x="830" y="294" width="152" height="26" rx="7" fill="#ccfbf1"/>
+<rect x="830" y="294" width="22" height="26" rx="7" fill="#115e59" opacity="0.9"/>
+<rect x="844" y="294" width="8" height="26" fill="#115e59" opacity="0.9"/>
+<text x="841" y="312" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">H</text>
+<text x="858" y="311.5" font-size="10.5" fill="#115e59" font-weight="600">Schnitte auf Beat</text>
+<rect x="134" y="352" width="126" height="30" rx="15" fill="#16a34a"/>
+<text x="197.0" y="372" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">Realaufnahme</text>
+<rect x="134" y="394" width="126" height="6" rx="3" fill="#e2e8f0"/>
+<rect x="134" y="394" width="121" height="6" rx="3" fill="#16a34a"/>
+<text x="134" y="416" font-size="11" fill="#64748b" font-weight="700">96%</text>
+<rect x="272" y="352" width="126" height="30" rx="15" fill="#2563eb"/>
+<text x="335.0" y="372" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">Bildschirmaufnahme</text>
+<rect x="272" y="394" width="126" height="6" rx="3" fill="#e2e8f0"/>
+<rect x="272" y="394" width="117" height="6" rx="3" fill="#2563eb"/>
+<text x="272" y="416" font-size="11" fill="#64748b" font-weight="700">93%</text>
+<rect x="410" y="352" width="126" height="30" rx="15" fill="#9333ea"/>
+<text x="473.0" y="372" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">KI-Video</text>
+<rect x="410" y="394" width="126" height="6" rx="3" fill="#e2e8f0"/>
+<rect x="410" y="394" width="123" height="6" rx="3" fill="#9333ea"/>
+<text x="410" y="416" font-size="11" fill="#64748b" font-weight="700">98%</text>
+<rect x="548" y="352" width="126" height="30" rx="15" fill="#9333ea" stroke="#b45309" stroke-width="2" stroke-dasharray="4 3"/>
+<text x="611.0" y="372" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">KI-Video</text>
+<rect x="548" y="394" width="126" height="6" rx="3" fill="#e2e8f0"/>
+<rect x="548" y="394" width="111" height="6" rx="3" fill="#9333ea"/>
+<text x="548" y="416" font-size="11" fill="#64748b" font-weight="700">88%</text>
+<text x="548" y="434" font-size="10.5" fill="#b45309" font-weight="700">⚠ Agent prüft visuell</text>
+<rect x="686" y="352" width="126" height="30" rx="15" fill="#d97706"/>
+<text x="749.0" y="372" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">Code-Rendering</text>
+<rect x="686" y="394" width="126" height="6" rx="3" fill="#e2e8f0"/>
+<rect x="686" y="394" width="120" height="6" rx="3" fill="#d97706"/>
+<text x="686" y="416" font-size="11" fill="#64748b" font-weight="700">95%</text>
+<rect x="830" y="352" width="152" height="30" rx="15" fill="#0d9488"/>
+<text x="906.0" y="372" font-size="11.5" fill="#fff" font-weight="800" text-anchor="middle">Stimme + Archivmusik</text>
+<rect x="830" y="394" width="152" height="6" rx="3" fill="#e2e8f0"/>
+<rect x="830" y="394" width="137" height="6" rx="3" fill="#0d9488"/>
+<text x="830" y="416" font-size="11" fill="#64748b" font-weight="700">90%</text>
+<text x="134" y="462" font-size="12" fill="#64748b">Harte Belege (AIGC-Tags, Frame-Takt) wiegen schwerer als „sieht aus wie“; Shots, bei denen die Quellen sich widersprechen, prüft der Agent visuell</text>
+<g filter="url(#sh)"><rect x="134" y="490" width="126" height="120" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-opacity="0.35"/></g>
+<rect x="146" y="507" width="20" height="14" rx="3" fill="none" stroke="#16a34a" stroke-width="2"/><circle cx="156.0" cy="514" r="4" fill="none" stroke="#16a34a" stroke-width="2"/><rect x="152" y="503" width="8" height="5" rx="1" fill="#16a34a"/>
+<text x="174" y="518" font-size="12.5" fill="#16a34a" font-weight="800">Drehen</text>
+<text x="146" y="542" font-size="10.5" fill="#0f172a">1 Set, 1 Kamera</text>
+<text x="146" y="563" font-size="10.5" fill="#0f172a">Ringlicht + Handy</text>
+<g filter="url(#sh)"><rect x="272" y="490" width="126" height="120" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-opacity="0.35"/></g>
+<rect x="284" y="504" width="20" height="13" rx="2" fill="none" stroke="#2563eb" stroke-width="2"/><path d="M290,522 h8 M294.0,517 v5" stroke="#2563eb" stroke-width="2"/><circle cx="299" cy="509" r="2.5" fill="#ef4444"/>
+<text x="312" y="518" font-size="12.5" fill="#2563eb" font-weight="800">Aufnehmen</text>
+<text x="284" y="542" font-size="10.5" fill="#0f172a">echtes Material</text>
+<text x="284" y="563" font-size="10.5" fill="#0f172a">nie generiert</text>
+<g filter="url(#sh)"><rect x="410" y="490" width="264" height="120" rx="10" fill="#f3e8ff" stroke="#9333ea" stroke-opacity="0.35"/></g>
+<path d="M432,502 Q432,512 442,512 Q432,512 432,522 Q432,512 422,512 Q432,512 432,502 Z" fill="#9333ea"/><path d="M441,501 Q441,505 445,505 Q441,505 441,509 Q441,505 437,505 Q441,505 441,501 Z" fill="#9333ea"/>
+<text x="450" y="518" font-size="12.5" fill="#9333ea" font-weight="800">2 Shots in 1 Generierung</text>
+<text x="422" y="542" font-size="10.5" fill="#0f172a">Multi-Shot-Prompt + 2 Produktbilder + @Original</text>
+<text x="422" y="563" font-size="10.5" fill="#0f172a">nach Modellfähigkeit: 10 s pro Aufruf,</text>
+<text x="422" y="584" font-size="10.5" fill="#0f172a">Multi-Shot-Ausgabe, 2 Referenzbilder</text>
+<g filter="url(#sh)"><rect x="686" y="490" width="126" height="120" rx="10" fill="#fef3c7" stroke="#d97706" stroke-opacity="0.35"/></g>
+<path d="M704,505 l-6,7 l6,7 M712,505 l6,7 l-6,7 M710,503 l-4,18" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="726" y="518" font-size="12.5" fill="#d97706" font-weight="800">Coden</text>
+<text x="698" y="542" font-size="10.5" fill="#0f172a">Remotion-Projekt</text>
+<text x="698" y="563" font-size="10.5" fill="#0f172a">Text, Layout, Motion</text>
+<g filter="url(#sh)"><rect x="830" y="490" width="152" height="120" rx="10" fill="#ccfbf1" stroke="#0d9488" stroke-opacity="0.35"/></g>
+<path d="M844,509 h5 l6,-5 v16 l-6,-5 h-5 Z" fill="#0d9488"/><path d="M858,508 q4,4 0,8 M861,505 q7,7 0,14" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round"/>
+<text x="870" y="518" font-size="12.5" fill="#0d9488" font-weight="800">Drei Spuren</text>
+<text x="842" y="542" font-size="10.5" fill="#0f172a">Stimme: selbst oder TTS</text>
+<text x="842" y="563" font-size="10.5" fill="#0f172a">Musik: Archiv, 122 BPM</text>
+<text x="842" y="584" font-size="10.5" fill="#0f172a">SFX: nach Zeitplan</text>
+<path d="M420,478 v6 H664 v-6" fill="none" stroke="#9333ea" stroke-width="2.2"/>
+<path d="M542.0,484 v6" stroke="#9333ea" stroke-width="2.2"/>
+<path d="M37,632 V688 H126" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#ah)"/>
+<g filter="url(#sh)"><rect x="134" y="664" width="848" height="52" rx="12" fill="#0f172a"/></g>
+<text x="150" y="686" font-size="14" fill="#fff" font-weight="800">Bericht  report.html · breakdown.json</text>
+<text x="150" y="705" font-size="11" fill="#cbd5e1">Fazit in einem Satz · Remake-Plan nach drehen / generieren / coden · Stills, Belege, Prompts pro Shot · Untertitel SRT / ASS</text>
+</svg>

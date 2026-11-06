@@ -1,11 +1,51 @@
 """User memory: corrections fix the breakdown, persist, re-apply, and surface as hints; prefs set defaults."""
 import json
 
+import pytest
 import yaml
 
 from rea_video.cli import main
 from rea_video.memory import load_corrections, patterns
 from rea_video.pipeline import _vlm_gate, decompose
+
+
+@pytest.mark.parametrize("bounds, expected", [
+    ({"end": 2.0}, ["shot_001"]),
+    ({"start": 2.0, "end": 4.0}, ["shot_002"]),
+    ({"start": 4.0}, ["shot_003"]),
+    ({}, ["shot_001", "shot_002", "shot_003"]),
+    ({"shots": "2"}, ["shot_002"]),
+])
+def test_correction_bounds_only_modify_and_remember_selected_shots(bounds, expected):
+    from rea_video.memory import correct, reapply
+
+    def breakdown():
+        return {"source": {"filename": "example.mp4", "duration": 6.0, "sha256_head": "example"},
+                "shots": [{"id": f"shot_{i + 1:03d}", "start": i * 2.0, "end": (i + 1) * 2.0,
+                           "duration": 2.0, "base": {"label": "live_action", "confidence": 0.8},
+                           "deterministic": {"probs": {"live_action": 1.0}, "facts": {}}}
+                          for i in range(3)]}
+
+    b = breakdown()
+    correct(b, label="ai_video", **bounds)
+    assert [s["id"] for s in b["shots"] if "user" in s] == expected
+    assert [c["shot"] for c in load_corrections()] == expected
+    fresh = breakdown()
+    reapply(fresh)
+    assert [s["id"] for s in fresh["shots"] if "user" in s] == expected
+
+
+def test_empty_end_only_correction_does_not_change_memory():
+    from rea_video.memory import correct
+
+    b = {"source": {"filename": "example.mp4", "duration": 2.0, "sha256_head": "example"},
+         "shots": [{"id": "shot_001", "start": 0.0, "end": 2.0, "duration": 2.0,
+                    "base": {"label": "live_action", "confidence": 0.8},
+                    "deterministic": {"probs": {"live_action": 1.0}, "facts": {}}}]}
+    with pytest.raises(ValueError, match="没有选中任何镜头"):
+        correct(b, label="ai_video", end=0.0)
+    assert "user" not in b["shots"][0]
+    assert load_corrections() == []
 
 
 def test_correction_fixes_breakdown_and_is_remembered(media, tmp_path, capsys):
@@ -73,8 +113,12 @@ def test_single_image_reader_cannot_flip_ai_vs_live_axis():
     assert _vlm_gate(rec(p(ai_video=0.9, avatar=0.03)), vlm_avatar, {}) is None          # tools sure + not in top-2
     assert _vlm_gate(rec(p(ai_video=0.74, cg_3d=0.1)), p(cg_3d=0.95), {}) is None         # tools sure on AI axis
     assert _vlm_gate(rec(p(cg_3d=0.56, code_render=0.36)), p(code_render=0.8), {})        # 3D vs code: VLM helps
-    assert _vlm_gate(rec(p(ai_video=0.46, live_action=0.38), {"transcode_degraded": True}),
+    assert _vlm_gate(rec(p(cg_3d=0.51, ai_video=0.18, code_render=0.12)), p(code_render=0.8), {})  # rendered subtype: reader picks
+    assert _vlm_gate(rec(p(ai_video=0.3, live_action=0.25, cg_3d=0.2)), p(avatar=0.9), {}) is None  # not for generated subtypes
+    assert _vlm_gate(rec(p(ai_video=0.46, live_action=0.38), {"transcode_degraded": True, "pulldown": "24→30"}),
                      p(live_action=0.85), {"native30": False}) is None                    # 24fps transcode never -> live
+    assert _vlm_gate(rec(p(ai_video=0.46, live_action=0.38), {"transcode_degraded": True, "native_cadence": True}),
+                     p(live_action=0.85), {"native30": False})                            # this shot has camera cadence: the reader decides
     assert _vlm_gate(rec(p(ai_video=0.46, live_action=0.38), {"transcode_degraded": True}),
                      p(live_action=0.85), {"native30": True})
     agent_only = {"deterministic": {"probs": p(ai_video=0.9, avatar=0.03), "facts": {}}, "review": {"label_probs": vlm_avatar}}

@@ -18,6 +18,7 @@ from collections import Counter
 from pathlib import Path
 
 from .classify import LABEL_ZH, LABELS, top
+from .i18n import T, semi
 from .util import OCR_LANGS
 
 PREF_KEYS = {
@@ -27,6 +28,8 @@ PREF_KEYS = {
     "stems": "decompose 是否默认做人声/配乐分离：on / off",
     "reviewer": "apply-review 默认的复核者名字",
     "ocr_lang": "字幕/花字 OCR 的语言：zh（中英，默认）/ ja（日文，首次使用自动下载约 10 MB 识别模型）",
+    "capsule_root": "capsule-cinema 仓库位置（remake-plan / remake-run / capsule-draft 的 --capsule-root；也可设 $CAPSULE_CINEMA_ROOT）",
+    "lang": "报告和结论的语言：zh（默认）/ en；agent 应按用户提问的语言选，用户明确指定时以指定为准",
 }
 ON_OFF = ("on", "off")
 HINT_MIN = 2  # a correction pattern becomes a hint once it has been seen this many times
@@ -57,7 +60,7 @@ def set_pref(key: str, value: str | None) -> dict:
         raise ValueError(f"{key} 只能是 on / off")
     if value is not None and key == "ocr_lang" and value not in OCR_LANGS:
         raise ValueError(f"ocr_lang 只能是 {' / '.join(OCR_LANGS)}")
-    if value is not None and key == "env_file":
+    if value is not None and key in ("env_file", "capsule_root"):
         value = str(Path(value).expanduser().resolve())
     prefs = load_prefs()
     if value is None:
@@ -91,6 +94,12 @@ def pref(key: str, default=None):
     return load_prefs().get(key, default)
 
 
+def capsule_root(explicit: str | None = None) -> Path:
+    """capsule-cinema 仓库：命令行 > $CAPSULE_CINEMA_ROOT > prefs capsule_root > ~/code/github/capsule-cinema。"""
+    raw = explicit or os.getenv("CAPSULE_CINEMA_ROOT") or pref("capsule_root") or str(Path.home() / "code/github/capsule-cinema")
+    return Path(raw).expanduser().resolve()
+
+
 # ---------------- corrections ----------------------------------------------------------------------
 
 def load_corrections() -> list[dict]:
@@ -112,9 +121,10 @@ def _top(p: dict | None) -> str | None:
 
 def _select(breakdown: dict, shots: str | None, start: float | None, end: float | None) -> list[dict]:
     recs = breakdown["shots"]
-    if shots in (None, "", "all") and start is None:
+    if shots in (None, "", "all") and start is None and end is None:
         return recs
-    if start is not None:
+    if start is not None or end is not None:
+        start = start if start is not None else 0.0
         e = end if end is not None else breakdown["source"]["duration"]
         return [r for r in recs if min(r["end"], e) - max(r["start"], start) > 0.5 * r["duration"]]
     want = set()
@@ -216,36 +226,39 @@ def hint_for(tool_label: str, pats: list[dict]) -> str | None:
     hits = [p for p in pats if p["tool"] == tool_label and p["count"] >= HINT_MIN]
     if not hits:
         return None
-    return "；".join(f"用户过去 {p['count']} 次把工具判的「{LABEL_ZH.get(p['tool'], p['tool'])}」改成「{LABEL_ZH[p['right']]}」"
-                    for p in hits) + "，请重点核对"
+    return semi().join(T("用户过去 {n} 次把工具判的「{a}」改成「{b}」", "users have changed the tool's \"{a}\" to \"{b}\" {n} times before",
+                         n=p['count'], a=LABEL_ZH.get(p['tool'], p['tool']), b=LABEL_ZH[p['right']])
+                       for p in hits) + T("，请重点核对", "; check this one carefully")
 
 
 def summary_lines() -> list[str]:
     prefs = load_prefs()
     cs = load_corrections()
-    lines = [f"记忆目录: {home()}"]
+    lines = [T("记忆目录: {h}", "Memory dir: {h}", h=home())]
     set_prefs = {k: v for k, v in prefs.items() if k in PREF_KEYS}
-    lines.append("偏好: " + ("，".join(f"{k}={v}" for k, v in set_prefs.items()) if set_prefs else "（未设置）"))
+    lines.append(T("偏好: ", "Preferences: ") + (T("，", ", ").join(f"{k}={v}" for k, v in set_prefs.items()) if set_prefs else T("（未设置）", "(none set)")))
     for i, n in enumerate(prefs.get("notes", []), 1):
-        lines.append(f"  说明 {i}: {n}")
+        lines.append(T("  说明 {i}: {n}", "  Note {i}: {n}", i=i, n=n))
     if not cs:
-        lines.append("纠正: 还没有记录（用户指出判错时运行 rea-video correct）")
+        lines.append(T("纠正: 还没有记录（用户指出判错时运行 rea-video correct）", "Corrections: none yet (run rea-video correct when the user points out a wrong call)"))
         return lines
     videos = {c.get("video_key") for c in cs}
-    lines.append(f"纠正: {len(cs)} 条，涉及 {len(videos)} 条视频")
+    lines.append(T("纠正: {n} 条，涉及 {v} 条视频", "Corrections: {n} across {v} videos", n=len(cs), v=len(videos)))
     for p in patterns(cs):
-        extra = [f"VLM 也判错 {p['vlm_wrong']}"] if p["vlm_wrong"] else []
-        extra += [f"agent 复核也判错 {p['review_wrong']}"] if p["review_wrong"] else []
-        extra += [f"其中转码视频 {p['transcoded']}"] if p["transcoded"] else []
-        lines.append(f"  工具「{LABEL_ZH.get(p['tool'], p['tool'])}」→ 用户「{LABEL_ZH[p['right']]}」 {p['count']} 个镜头 / {p['videos']} 条视频"
-                     + (f"（{'，'.join(extra)}）" if extra else ""))
+        extra = [T("VLM 也判错 {n}", "VLM also wrong {n}", n=p['vlm_wrong'])] if p["vlm_wrong"] else []
+        extra += [T("agent 复核也判错 {n}", "agent review also wrong {n}", n=p['review_wrong'])] if p["review_wrong"] else []
+        extra += [T("其中转码视频 {n}", "{n} transcoded", n=p['transcoded'])] if p["transcoded"] else []
+        lines.append(T("  工具「{a}」→ 用户「{b}」 {c} 个镜头 / {v} 条视频", "  tool \"{a}\" → user \"{b}\": {c} shots / {v} videos",
+                       a=LABEL_ZH.get(p['tool'], p['tool']), b=LABEL_ZH[p['right']], c=p['count'], v=p['videos'])
+                     + (T("（{e}）", " ({e})", e=T("，", ", ").join(extra)) if extra else ""))
     real = [c for c in cs if c.get("real_material") is not None and c["real_material"] != c.get("real_before")]
     if real:
-        lines.append(f"  真实素材判断被纠正 {len(real)} 次（漏标 {sum(1 for c in real if c['real_material'])}，"
-                     f"误标 {sum(1 for c in real if not c['real_material'])}）")
+        lines.append(T("  真实素材判断被纠正 {n} 次（漏标 {m}，误标 {f}）", "  real-material calls corrected {n} times (missed {m}, false {f})",
+                       n=len(real), m=sum(1 for c in real if c['real_material']), f=sum(1 for c in real if not c['real_material'])))
     for c in [c for c in cs if c.get("note")][-5:]:
-        lines.append(f"  备注（{c['video']} {c['shot']}）: {c['note']}")
-    lines.append("把纠正过的视频导出为评测样本：rea-video memory --export-labels eval/user_labels.yaml")
+        lines.append(T("  备注（{v} {s}）: {n}", "  note ({v} {s}): {n}", v=c['video'], s=c['shot'], n=c['note']))
+    lines.append(T("把纠正过的视频导出为评测样本：rea-video memory --export-labels eval/user_labels.yaml",
+                   "Export the corrected videos as eval samples: rea-video memory --export-labels eval/user_labels.yaml"))
     return lines
 
 
