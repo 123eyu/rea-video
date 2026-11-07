@@ -122,7 +122,7 @@ All real footage: an overhead phone rig, one rug, one camera position, no voice-
 
 ## Remakes
 
-After rea-video breaks a video down, the remake recipe in [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) generates a new version: camera, motion, pacing and transitions follow the original, only the elements you choose are swapped.
+After rea-video breaks a video down, the remake recipe in [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) generates a new version: camera, motion, pacing and transitions follow the original, only the elements you choose are swapped.
 These results were generated with a self-hosted MiniMax H3: the original shot is the motion reference, and keyframes with the swapped elements (gpt-image-2) set the look.
 Below are three remakes that OiiOii showed in its WeChat articles. For each we made two versions: the same swap as OiiOii, and one that also swaps the subject, setting and props.
 Each GIF plays four versions in sync: original, OiiOii remake, our remake, element-swap version.
@@ -198,7 +198,7 @@ No. Tools-only mode is offline and free, and already accurate on original files.
 <details>
 <summary>Can it remake the whole video automatically?</summary>
 
-Partly. With [capsule-cinema](https://github.com/JuneYaooo/cheap-claude-video) installed, AI shots are generated and placed back on the original timeline automatically. Live shots you film from the shooting plan; code shots the agent writes as a Remotion project. See [docs/replicate.md](docs/replicate.md).
+Partly. With [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) installed, AI shots are generated and placed back on the original timeline automatically. Live shots you film from the shooting plan; code shots the agent writes as a Remotion project. See [docs/replicate.md](docs/replicate.md).
 
 </details>
 
@@ -230,3 +230,7 @@ Want a video broken down? Open a [request issue](https://github.com/JuneYaooo/re
 ## Credits
 
 Inspired by [REA (Reverse Engineer Anything)](https://github.com/morluto/rea): trace from what you see back to how it was made, back every claim with evidence, and verify by measurement.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=JuneYaooo/rea-video&type=Date)](https://star-history.com/#JuneYaooo/rea-video&Date)

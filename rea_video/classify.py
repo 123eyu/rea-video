@@ -11,8 +11,10 @@ Base layer labels (what produced the moving picture of the shot):
   static_hold    静帧停留（图片或卡片定格，无运动）
   anim_2d        2D 动画（手绘逐帧、Live2D、AE/Spine 角色动画、Flash 风格）
   stop_motion    定格动画（实物/黏土/纸偶逐帧拍摄）
-The last two have no pixel test yet (held frames "on twos" look like a frame-rate conversion); only an image reader
-(VLM or agent) can call them, see UNMEASURED.
+  film_footage   影视片段（剪进来的电影、电视剧、短剧画面：影视解说、混剪、名场面）
+anim_2d / stop_motion have no pixel test yet (held frames "on twos" look like a frame-rate conversion); film_footage is
+camera footage like any other, so pixels cannot tell who shot it (the tools only collect hints: letterbox, 24/25fps
+source). Only an image reader (VLM or agent) can call these three, see UNMEASURED.
 Overlays (composited on top): subtitle / title / label text, static graphics, layout template.
 
 Deterministic evidence is decisive for *temporal* questions (is anything moving? is the
@@ -28,9 +30,9 @@ from difflib import SequenceMatcher
 from .i18n import LangDict, T, join
 
 LABELS = ["live_action", "ai_video", "avatar", "cg_3d", "code_render", "screen_capture", "still_motion", "static_hold",
-          "anim_2d", "stop_motion"]
+          "anim_2d", "stop_motion", "film_footage"]
 # labels the deterministic layer cannot score: decided by image readers only (see pipeline._vlm_gate)
-UNMEASURED = ("anim_2d", "stop_motion")
+UNMEASURED = ("anim_2d", "stop_motion", "film_footage")
 LABEL_ZH = LangDict({
     "live_action": "实拍",
     "ai_video": "AI 生成视频",
@@ -42,6 +44,7 @@ LABEL_ZH = LangDict({
     "static_hold": "静帧停留",
     "anim_2d": "2D 动画",
     "stop_motion": "定格动画",
+    "film_footage": "影视片段",
 }, en={
     "live_action": "live action",
     "ai_video": "AI-generated video",
@@ -53,12 +56,14 @@ LABEL_ZH = LangDict({
     "static_hold": "static hold",
     "anim_2d": "2D animation",
     "stop_motion": "stop motion",
+    "film_footage": "film / TV footage",
 })
 IMAGE_SOURCE_ZH = LangDict({"ai_image": "AI 生成图", "photo": "真实照片", "graphic": "设计/渲染图形", "screenshot": "截图", "unknown": "未知"},
                            en={"ai_image": "AI-generated image", "photo": "photo", "graphic": "designed / rendered graphic", "screenshot": "screenshot", "unknown": "unknown"})
 # how much to trust the deterministic layer per label (VLM weight is 1.0)
 DET_WEIGHT = {"static_hold": 1.6, "still_motion": 1.4, "code_render": 1.0, "screen_capture": 0.6,
-              "cg_3d": 0.5, "live_action": 0.6, "ai_video": 0.6, "avatar": 0.4, "anim_2d": 0.3, "stop_motion": 0.3}
+              "cg_3d": 0.5, "live_action": 0.6, "ai_video": 0.6, "avatar": 0.4, "anim_2d": 0.3, "stop_motion": 0.3,
+              "film_footage": 0.3}
 
 
 # weight of the model's opinion (VLM or an agent's review) relative to the deterministic layer
@@ -69,6 +74,12 @@ VLM_WEIGHT = 0.7
 
 def _sig(x: float) -> float:
     return 1.0 / (1.0 + math.exp(-x))
+
+
+def no_repeats(f: dict) -> bool:
+    """No duplicate frames of a 24/25 fps source: under 2% of frame pairs, or a single repeated frame in a
+    short shot (a 24 -> 30 fps pull-up repeats every fifth frame, one repeat alone says nothing)."""
+    return f.get("dup_ratio", 1) < 0.02 or f.get("dup_count", 99) <= 1
 
 
 def _norm(d: dict[str, float]) -> dict[str, float]:
@@ -111,6 +122,24 @@ RULES = {
 }
 
 
+FILM_HINT_ZH = LangDict({"letterbox": "画面嵌在上下或左右的黑边里（影视解说常见的版式）",
+                         "source_24": "素材是 24/25fps 源（电影、电视剧的帧率；AI 视频也常是这个帧率）"},
+                        en={"letterbox": "the picture sits inside black bars (the usual film-recap layout)",
+                            "source_24": "the source is 24/25fps (the frame rate of films and TV; AI video often uses it too)"})
+
+
+def film_hints(f: dict, fps: float | None, pulldown: str | None) -> list[str]:
+    """Hints that a photographic shot was cut from a film / series. letterbox: the picture inside fixed black bars,
+    wider than tall (features.picture_box). source_24: a 24/25fps source, pulled up to 30 or native. source_24 alone is the AI-video signature too, so it only counts next to another hint."""
+    out = []
+    if f.get("picture_box") and f.get("picture_aspect", 0) >= 1.3:
+        out.append("letterbox")
+    native_film_rate = bool(fps and (23.5 <= fps <= 25.5) and f.get("dup_ratio", 1) < 0.05)
+    if out and (pulldown in ("24→30", "24→60", "25→30?") or native_film_rate):
+        out.append("source_24")
+    return out
+
+
 def lowlight_photo(f: dict, faces: float = 0.0) -> bool:
     """Dim footage with a person in it (see RULES["lowlight"]): crushed shadows shrink the palette and add flat
     blocks, so the "rendered texture" cues do not apply."""
@@ -137,11 +166,16 @@ def video_context(shots: list[dict], provenance: dict | None, fps: float | None)
             continue  # rendered graphics or frozen frames say nothing about camera cadence
         d = float(r.get("duration", 0))
         photo_dur += d
-        if f.get("dup_ratio", 1) < 0.02 and f.get("sharp_period_ac", 0) < 0.45:
+        if no_repeats(f) and f.get("sharp_period_ac", 0) < 0.45:
             native_dur += d
     native30 = bool(fps and 29 <= fps <= 31 and photo_dur >= 3 and native_dur / photo_dur >= 0.7)
+    # photographic time carrying a film / TV hint (letterbox): a film recap or compilation looks like this
+    film_dur = sum(float(r.get("duration", 0)) for r in shots
+                   if (r.get("features") or {}).get("palette95", 0) >= 100 and film_hints(r.get("features") or {}, fps, None))
+    total = sum(float(r.get("duration", 0)) for r in shots) or 1.0
     return {"transcoded": bool(plat), "platform": plat, "native30": native30,
-            "native30_share": round(native_dur / photo_dur, 3) if photo_dur else None}
+            "native30_share": round(native_dur / photo_dur, 3) if photo_dur else None,
+            "film_hint_share": round(film_dur / total, 3)}
 
 
 def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None, faces: float = 0.0,
@@ -315,12 +349,22 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
     # this shot's own cadence: a 30 fps file whose frames never repeat was captured at 30 fps (phones) rather than
     # generated at 24 and pulled up. Per shot, unlike ctx["native30"], so a mixed edit (AI opener + phone footage)
     # keeps the signature on the filmed shots. Platform re-encodes add a GOP sharpness rhythm, so that cue is skipped there.
-    facts["native_cadence"] = bool(fps and 29 <= fps <= 31 and dup < 0.02 and not pulldown
+    facts["native_cadence"] = bool(fps and 29 <= fps <= 31 and no_repeats(f) and not pulldown
                                    and (ctx.get("transcoded") or f.get("sharp_period_ac", 0) < 0.45))
     if dup_pd:
         ev.append(T("重复帧呈 {pd} 规律（{dup:.0%}，周期 {per}）：原始素材为 24/25fps 后转码，常见于 AI 生成视频、3D/动画渲染或电影素材",
                     "Duplicate frames follow a {pd} pattern ({dup:.0%}, period {per}): a 24/25fps source transcoded up, typical of AI-generated video, 3D / animation renders or cinema footage",
                     pd=pulldown, dup=dup, per=per))
+
+    # ---- film / TV footage hints -------------------------------------------------
+    # who shot the picture is not in the pixels (a film still is camera footage, an AI drama can look the same):
+    # these only say "this may be a clip cut from a film or series", the call is left to an image reader
+    hints = film_hints(f, fps, pulldown) if photo > 0.5 and family in ("dynamic", "mostly_static", "planar") else []
+    facts["film_hints"] = hints
+    if hints:
+        ev.append(T("影视片段线索：{h}。这些只说明可能是剪进来的影视剧画面，和 AI 视频、自己拍的实拍在像素上分不开，要看图确认",
+                    "Film / TV footage hints: {h}. They only suggest a clip cut from a film or series; pixels cannot tell it from AI video "
+                    "or self-shot footage, an image reader has to confirm", h=join(FILM_HINT_ZH[k] for k in hints)))
 
     live_hint = 0.0
     live_hint += 1.2 * _sig((noise - 0.9) / 0.2)
@@ -341,7 +385,7 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
     if cam_tags:
         live_hint += 1.0
         ev.append(T("容器元数据含拍摄设备信息（make/model/location）", "Container metadata carries capture-device tags (make/model/location)"))
-    if ctx.get("native30") and dup < 0.02 and not pulldown:
+    if ctx.get("native30") and no_repeats(f) and not pulldown:
         live_hint += 0.9
         ev.append(T("整片是原生 30fps、实拍类镜头没有 24fps 源的重复帧（{share:.0%} 时长）：手机直出常见，生成模型多输出 24fps",
                     "The whole file is native 30fps and photographic shots carry no 24fps-source duplicate frames ({share:.0%} of the duration): typical of straight-from-phone footage, generators mostly output 24fps",
@@ -376,6 +420,7 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
 
     # ---- assemble scores ---------------------------------------------------------
     s = {k: 0.02 for k in LABELS}
+    s["film_footage"] = 0.0  # scored only from film hints below; a floor here would dilute every other label
     if family == "frozen":
         # a frozen *rendered* card is code/template output; a frozen photo/AI picture is a still hold
         screenshot_like = graphic > 0.45 and axis > 0.42 and text_cov > 0.05
@@ -420,6 +465,9 @@ def deterministic(f: dict, overlay: dict | None = None, text: dict | None = None
         s["avatar"] += 0.6 * photo * (1 if faces > 0.6 else 0.1) * (1.0 if speech else 0.4) * (1 - live_hint) * moving_cam
         if pulldown:
             s["cg_3d"] *= 1.2
+    if hints:
+        # a runner-up at most: enough to show up in the probabilities, never enough to win on hints alone
+        s["film_footage"] += 0.25 * photo * len(hints)
     if gen_tags:
         s["ai_video"] += 1.0
         s["avatar"] += 0.3
@@ -440,7 +488,7 @@ def image_source_guess(f: dict, facts: dict) -> str:
 # Fusion decides the group first, then the subtype inside it: when the tools say "AI video" and an agent says
 # "digital avatar", both are votes for "generated" and must not be outvoted by a third source's "live action".
 GROUPS = {"ai_video": "generated", "avatar": "generated", "cg_3d": "rendered", "code_render": "rendered", "anim_2d": "rendered",
-          "stop_motion": "live_action"}
+          "stop_motion": "live_action", "film_footage": "live_action"}
 
 
 def group_of(label: str) -> str:
@@ -467,13 +515,16 @@ def fuse(det: dict[str, float], vlm: dict[str, float] | None, family: str, major
     # hard temporal constraints: a frozen shot cannot be a generated *video*
     mult = {k: 1.0 for k in LABELS}
     if family == "frozen":
-        for k in ("ai_video", "live_action", "avatar", "cg_3d", "still_motion", "anim_2d", "stop_motion"):
+        for k in ("ai_video", "live_action", "avatar", "cg_3d", "still_motion", "anim_2d", "stop_motion", "film_footage"):
             mult[k] = 0.05
     if family == "planar":
-        for k in ("live_action", "avatar"):
+        for k in ("live_action", "avatar", "film_footage"):
             mult[k] = 0.2
-    sub = {k: _log_pool(det.get(k, 0.0), vlm.get(k, 0.0), DET_WEIGHT[k]) * mult[k] for k in LABELS}
-    raw = {k: _log_pool(det.get(k, 0.0), vlm.get(k, 0.0), DET_WEIGHT[k]) for k in LABELS}
+    # the tools cannot tell film / TV footage from self-shot footage (both are camera pictures), so inside the filmed
+    # group their live-action score stands for both and the image reader picks the subtype
+    pool_det = dict(det, film_footage=max(det.get("film_footage", 0.0), det.get("live_action", 0.0)))
+    sub = {k: _log_pool(pool_det.get(k, 0.0), vlm.get(k, 0.0), DET_WEIGHT[k]) * mult[k] for k in LABELS}
+    raw = {k: _log_pool(pool_det.get(k, 0.0), vlm.get(k, 0.0), DET_WEIGHT[k]) for k in LABELS}
     dg, vg = _group_sum(det), _group_sum(vlm)
     members: dict[str, list[str]] = {}
     for k in LABELS:

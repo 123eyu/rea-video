@@ -120,7 +120,7 @@ Todo imagen real: un soporte cenital para el móvil, una alfombra, una sola posi
 
 ## Remakes
 
-Después de que rea-video analice un vídeo, la receta de remake de [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) genera una versión nueva: la cámara, el movimiento, el ritmo y las transiciones siguen al original, y solo se cambian los elementos que elijas.
+Después de que rea-video analice un vídeo, la receta de remake de [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) genera una versión nueva: la cámara, el movimiento, el ritmo y las transiciones siguen al original, y solo se cambian los elementos que elijas.
 Estos resultados se generaron con un MiniMax H3 autoalojado: el plano original sirve de referencia de movimiento, y los fotogramas clave con los elementos cambiados (gpt-image-2) definen el aspecto.
 Abajo hay tres remakes que OiiOii mostró en sus artículos de WeChat. De cada uno hicimos dos versiones: el mismo cambio que OiiOii, y otra que además cambia el protagonista, el escenario y el atrezo.
 Cada GIF reproduce cuatro versiones sincronizadas: original, remake de OiiOii, nuestro remake y versión con elementos cambiados.
@@ -196,7 +196,7 @@ No. El modo solo herramientas funciona offline, es gratis y ya es preciso con ar
 <details>
 <summary>¿Puede rehacer el vídeo entero automáticamente?</summary>
 
-En parte. Con [capsule-cinema](https://github.com/JuneYaooo/cheap-claude-video) instalado, los planos de IA se generan y se colocan automáticamente en la línea de tiempo original. Los planos de imagen real los grabas tú siguiendo el plan de rodaje; los planos de código los escribe el agente como proyecto de Remotion. Consulta [docs/replicate.md](../docs/replicate.md).
+En parte. Con [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) instalado, los planos de IA se generan y se colocan automáticamente en la línea de tiempo original. Los planos de imagen real los grabas tú siguiendo el plan de rodaje; los planos de código los escribe el agente como proyecto de Remotion. Consulta [docs/replicate.md](../docs/replicate.md).
 
 </details>
 

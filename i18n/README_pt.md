@@ -120,7 +120,7 @@ Tudo filmagem real: celular num suporte de cima, um tapete, uma posição de câ
 
 ## Remakes
 
-Depois que o rea-video analisa um vídeo, a receita de remake do [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) gera uma nova versão: câmera, movimento, ritmo e transições seguem o original, e só os elementos que você escolher são trocados.
+Depois que o rea-video analisa um vídeo, a receita de remake do [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) gera uma nova versão: câmera, movimento, ritmo e transições seguem o original, e só os elementos que você escolher são trocados.
 Estes resultados foram gerados com um MiniMax H3 auto-hospedado: o plano original serve de referência de movimento, e quadros-chave com os elementos trocados (gpt-image-2) definem o visual.
 Abaixo estão três remakes que a OiiOii mostrou em seus artigos no WeChat. Para cada um fizemos duas versões: a mesma troca da OiiOii, e outra que também troca o personagem, o cenário e os objetos.
 Cada GIF reproduz quatro versões em sincronia: original, remake da OiiOii, nosso remake, versão com elementos trocados.
@@ -196,7 +196,7 @@ Não. O modo só com ferramentas é offline e grátis, e já é preciso em arqui
 <details>
 <summary>Ele consegue refazer o vídeo inteiro automaticamente?</summary>
 
-Em parte. Com o [capsule-cinema](https://github.com/JuneYaooo/cheap-claude-video) instalado, os planos de IA são gerados e colocados de volta na linha do tempo original automaticamente. Os planos reais você filma seguindo o plano de filmagem; os planos em código o agente escreve como um projeto Remotion. Veja [docs/replicate.md](../docs/replicate.md).
+Em parte. Com o [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) instalado, os planos de IA são gerados e colocados de volta na linha do tempo original automaticamente. Os planos reais você filma seguindo o plano de filmagem; os planos em código o agente escreve como um projeto Remotion. Veja [docs/replicate.md](../docs/replicate.md).
 
 </details>
 

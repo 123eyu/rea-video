@@ -13,12 +13,13 @@ LABEL_COLOR = {
     "live_action": (46, 160, 67), "ai_video": (217, 70, 239), "avatar": (236, 72, 153), "cg_3d": (14, 165, 233),
     "code_render": (245, 158, 11), "screen_capture": (100, 116, 139), "still_motion": (168, 85, 247),
     "static_hold": (148, 163, 184), "anim_2d": (234, 88, 12), "stop_motion": (161, 98, 7),
+    "film_footage": (190, 18, 60),
 }
 # short names for the storyboard strip (the full names are too long for a 200px cell)
 LABEL_SHORT = {
     "live_action": "实拍", "ai_video": "AI 视频", "avatar": "数字人", "cg_3d": "3D 渲染", "code_render": "代码渲染",
     "screen_capture": "录屏/截图", "still_motion": "静图推拉", "static_hold": "静帧", "anim_2d": "2D 动画",
-    "stop_motion": "定格动画",
+    "stop_motion": "定格动画", "film_footage": "影视片段",
 }
 _FONT_CANDIDATES = [
     "/System/Library/Fonts/PingFang.ttc", "/System/Library/Fonts/STHeiti Medium.ttc", "/System/Library/Fonts/STHeiti Light.ttc", "/System/Library/Fonts/Hiragino Sans GB.ttc",

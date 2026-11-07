@@ -76,10 +76,12 @@ def cmd_review(args) -> int:
     b = read_json(out / "breakdown.json")
     set_lang(b.get("lang", "zh"))
     tasks, answers = build_tasks(b, str(out))
-    (out / "review_tasks.json").write_text(json.dumps(tasks, ensure_ascii=False, indent=2), encoding="utf-8")
+    from .util import dumps_rows
+
+    (out / "review_tasks.json").write_text(dumps_rows(tasks), encoding="utf-8")
     ans_path = out / "review_answers.json"
     if args.force or not ans_path.is_file():
-        ans_path.write_text(json.dumps(answers, ensure_ascii=False, indent=2), encoding="utf-8")
+        ans_path.write_text(dumps_rows(answers), encoding="utf-8")
     high = [s for s in tasks["shots"] if s["priority"] == "high"]
     print(f"{len(tasks['shots'])} 个镜头待看图复核，其中 {len(high)} 个优先：" + ", ".join(f"{s['id']}({'; '.join(s['why'])})" for s in high))
     print(f"说明和图片路径：{out / 'review_tasks.json'}")
@@ -104,6 +106,8 @@ def cmd_apply_review(args) -> int:
     b = finalize(b, out)
     for p in log["problems"]:
         print(f"跳过 {p}")
+    if log.get("unanswered"):
+        print(f"没作答、已跳过 {len(log['unanswered'])} 个镜头")
     changed = [(r["id"], log["before"][r["id"]], r["base"]["label"]) for r in b["shots"]
                if r["id"] in log["before"] and log["before"][r["id"]] != r["base"]["label"]]
     print(f"已并入 {len(log['applied'])}/{len(b['shots'])} 个镜头；改判 {len(changed)} 个" +
@@ -269,6 +273,19 @@ def cmd_summary(args) -> int:
     from .memory import hint_for, patterns
 
     pats = patterns()
+    low_n = sum(r["base"]["confidence"] < 0.6 for r in b["shots"])
+    mark_low = low_n <= len(b["shots"]) / 2  # when most shots are low, one line says so instead of a tag on every row
+    if not mark_low:
+        sure = [str(r["index"]) for r in b["shots"] if r["base"]["confidence"] >= 0.6]
+        lines.append(T("低置信: {n}/{m} 镜置信度 <0.6，都要复核", "Low confidence: {n}/{m} shots below 0.6, review them all", n=low_n, m=len(b["shots"]))
+                     + (T("（只有 #{s} 不用）", " (all but #{s})", s=",".join(sure)) if sure else ""))
+    notes: list[str] = []  # the same "待确认" sentence repeats across shots: number it, print each once below the table
+
+    def note_ref(text: str) -> str:
+        if text not in notes:
+            notes.append(text)
+        return T("待确认{i}", "open question {i}", i="①②③④⑤⑥⑦⑧⑨⑩"[notes.index(text)] if notes.index(text) < 10 else f"({notes.index(text) + 1})")
+
     for r in b["shots"]:
         base = r["base"]
         alt = sorted(base["probs"].items(), key=lambda kv: -kv[1])[1]
@@ -278,15 +295,17 @@ def cmd_summary(args) -> int:
         second = T("(用户纠正)", "(user correction)") if base["decided_by"] == "user" else T("(次选 {l} {p:.2f})", "(runner-up {l} {p:.2f})", l=alt[0], p=alt[1])
         lines.append(f"#{r['index']:>2} {r['start']:7.2f}-{r['end']:7.2f} {base['label']:<14} {base['confidence']:.2f} {second} "
                      f"| {T('素材', 'material')}:{mat} | {T('叠加', 'overlays')}:{','.join(sorted({l['kind'] for l in r.get('layers', [])})) or '-'} | {r['features'].get('camera')}"
-                     + (T("  ← 低置信，需要复核", "  ← low confidence, review it") if base["confidence"] < 0.6 else "")
-                     + (f"  ← {base['uncertain']}" if base.get("uncertain") else "")
+                     + (T("  ← 低置信，需要复核", "  ← low confidence, review it") if mark_low and base["confidence"] < 0.6 else "")
+                     + (f"  ← {note_ref(base['uncertain'])}" if base.get("uncertain") else "")
                      + (T("  ← 有分歧：{d}", "  ← disputed: {d}", d=base["disputed"]) if base.get("disputed") else "")
                      + (T("  ← 用户纠正过素材来源", "  ← material origin corrected by the user") if (r.get("material") or {}).get("user_corrected") else "")
                      + (f"  ← {past}" if past else "")
-                     + (f" | {shot_text(r)}" if r["base"]["label"] in ("live_action", "avatar") and shot_text(r) else "")
+                     + (f" | {shot_text(r, brief=True)}" if r["base"]["label"] in ("live_action", "avatar") and shot_text(r, brief=True) else "")
                      + (T(" | 动效 {n} 个，元素截图 {f}", " | {n} motion events, element crops {f}", n=len(r["motion"].get("events", [])),
                           f=r["motion"]["elements_sheet"]) if r["base"]["label"] in ("code_render", "screen_capture")
                         and (r.get("motion") or {}).get("elements_sheet") else ""))
+    if notes:
+        lines += [f"{note_ref(n)}: {n}" for n in notes]
     if s.get("aspects"):
         lines += [""] + s["aspects"]
     from .entities import cast

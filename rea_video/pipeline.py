@@ -12,10 +12,10 @@ from . import SCHEMA, __version__
 from .assets import detect_embedded, material_summary
 from .audio import analyze_audio, merge_audio_with_vlm
 from .sound_source import MUSIC_ZH, classify_sound_sources, per_clip_audio
-from .classify import LABEL_ZH, OVERLAY_KIND_ZH, RULES, UNMEASURED, decide, deterministic, drop_scene_text, fuse, group_of, image_source_guess, overlay_layers, top, verdict_text, video_context
-from .features import collect_samples, shot_features
+from .classify import FILM_HINT_ZH, LABEL_ZH, OVERLAY_KIND_ZH, RULES, UNMEASURED, decide, deterministic, drop_scene_text, fuse, group_of, image_source_guess, overlay_layers, top, verdict_text, video_context
+from .features import collect_samples, crop_box, intersect_box, photo_letterbox, shot_features
 from .media import cut_clip, extract_frame, require_tools, video_info
-from .overlay import ocr_frames, persistent_template, static_overlays, summarize_text
+from .overlay import ocr_frames, persistent_template, shot_ocr_frames, shot_ocr_items, static_overlays, summarize_text
 from .plan import Planner
 from .probe import provenance
 from .motion import element_crops, motion_events, palette, strip_frames
@@ -25,7 +25,7 @@ from . import aspects
 from .faces import shot_faces
 from .visual import LABEL_SHORT, shot_sheet, storyboard
 from .i18n import T, join, semi, set_lang
-from .vlm import SHOT_PROMPT, WHOLE_PROMPT, VLMClient, VLMConfig, normalize_shot_result, normalize_whole, prompt_lang_note, shot_hints, vlm_note
+from .vlm import SHOT_PROMPT, TAKE_NOTE, WHOLE_PROMPT, VLMClient, VLMConfig, normalize_shot_result, normalize_whole, prompt_lang_note, shot_hints, take_results, vlm_note
 
 
 def _sha256_head(path: Path, limit: int = 64 << 20) -> str:
@@ -33,6 +33,32 @@ def _sha256_head(path: Path, limit: int = 64 << 20) -> str:
     with path.open("rb") as f:
         h.update(f.read(limit))
     return h.hexdigest()
+
+
+TAKE_MAX_S, TAKE_MAX_PIECES = 12.0, 8  # one VLM look at most this long / this many jump-cut pieces
+
+
+def vlm_units(records: list[dict], max_calls: int) -> list[list[dict]]:
+    """Group shots for the VLM: jump-cut pieces of one take (same camera setup, cut apart in the edit) are one
+    clip and one call; every other shot is its own call. Past `max_calls`, the calls go to the units the
+    pixel statistics are least sure about, weighted by length, rather than to the first ones in the video."""
+    units: list[list[dict]] = []
+    for r in records:
+        u = units[-1] if units else None
+        if (u and r.get("transition_in") == "jump" and len(u) < TAKE_MAX_PIECES
+                and r["end"] - u[0]["start"] <= TAKE_MAX_S):
+            u.append(r)
+        else:
+            units.append([r])
+    if len(units) <= max_calls:
+        return units
+
+    def need(u: list[dict]) -> float:
+        sure = min(top(r["deterministic"]["probs"])[1] for r in u)
+        return (u[-1]["end"] - u[0]["start"]) * (1.05 - sure)
+
+    keep = sorted(sorted(range(len(units)), key=lambda k: -need(units[k]))[:max_calls])
+    return [units[k] for k in keep]
 
 
 def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, whole_vlm: bool = True,
@@ -75,6 +101,8 @@ def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, 
             ev = [e for e in visual_events(pack["text_cues"], pack["stickers"], []) if e["type"] != "subtitle_in"]
             pack["sfx_anchored"] = anchored_sfx(video, ev, (audio.get("sfx") or {}).get("events", []))
         pack["version"] = PACKAGING_VERSION
+    ocr_items = pack.pop("_ocr_items", None) if pack else None  # whole-video OCR hits, reused per shot below
+    ocr_step = float((pack or {}).get("ocr", {}).get("step_s") or 0.0)
 
     shot_records: list[dict] = []
     template_frames: list[np.ndarray] = []
@@ -88,29 +116,49 @@ def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, 
 
     from .packaging import clean_region
 
+    still_pool = ThreadPoolExecutor(max_workers=4)
+    stills = []
     for s in shots:
         smp = samples_by_shot[s.index]
         crop = clean_region(pack["stickers"], s.start, s.end) if pack else None
+        # a film / TV clip letterboxed into the frame: black bars read as flat, frozen, few-colour "rendered" pixels,
+        # so the picture is measured inside its box
+        lbox = photo_letterbox(smp.frames)
+        if lbox:
+            crop = intersect_box(lbox["box"], crop)
         # a sticker / GIF sitting on the shot would skew the picture statistics: measure the rest of the frame
         feats = shot_features(collect_samples(str(video), info, s, crop=crop) if crop else smp, info.fps)
-        if crop:
+        if lbox:
+            feats.update(picture_box=[round(v, 4) for v in lbox["box"]], picture_aspect=round(lbox["aspect"], 3),
+                         bar_share=round(lbox["bar_share"], 3))
+        if crop and not lbox:
             feats["measured_region"] = list(crop)
         ov = static_overlays(smp.frames)
-        text = summarize_text(ocr_frames(smp.frames, smp.frame_times)) if ocr else {"tracks": [], "text_coverage": 0.0, "items": []}
+        if ocr:
+            hits = shot_ocr_items(ocr_items, ocr_step, s.start, s.end)
+            if hits is None:  # no whole-video pass, or too sparse here: read a few of this shot's own frames
+                hits = ocr_frames(smp.frames, smp.frame_times, max_frames=shot_ocr_frames(s.duration))
+            text = summarize_text(hits)
+        else:
+            text = {"tracks": [], "text_coverage": 0.0, "items": []}
         embedded = detect_embedded(smp.frames, text.get("items"))
-        fd = shot_faces(smp.frames)
+        # faces, framing and light are read on the picture itself (inside the letterbox), not on the bars
+        pic = [crop_box(f, lbox["box"]) for f in smp.frames] if lbox else smp.frames
+        fd = shot_faces(pic)
         faces = fd["presence"]
         areas = [p["face"]["area"] for p in fd["frames"] if p.get("face")]
         feats["face_presence"] = faces
         feats["face_area"] = float(np.median(areas)) if areas else 0.0
-        asp = aspects.measure_shot(smp.frames, fd, feats, s.duration)
+        asp = aspects.measure_shot(pic, fd, feats, s.duration)
         probs, evidence, facts = deterministic(feats, ov, text, faces, audio, prov, fps=info.fps)
         layers = overlay_layers(ov, text, template)
         sid = f"shot_{s.index:03d}"
         shot_sheet(smp.frames, smp.frame_times, out / "shots" / f"{sid}.jpg")
         still_w = min(1080, info.display_size[0] or 1080)  # never upscale; rotated video: displayed width
-        extract_frame(video, s.start + min(0.05, s.duration / 4), out / "shots" / f"{sid}_first.jpg", width=still_w)
-        extract_frame(video, max(s.start, s.end - min(0.08, s.duration / 4)), out / "shots" / f"{sid}_last.jpg", width=still_w)
+        # full-resolution first / last frames (remake keyframes): ffmpeg runs in the background while the next shot is measured
+        stills.append(still_pool.submit(extract_frame, video, s.start + min(0.05, s.duration / 4), out / "shots" / f"{sid}_first.jpg", still_w))
+        stills.append(still_pool.submit(extract_frame, video, max(s.start, s.end - min(0.08, s.duration / 4)),
+                                        out / "shots" / f"{sid}_last.jpg", still_w))
         motion = None
         if top(probs)[0] in ("code_render", "screen_capture") or facts.get("graphic_score", 0.0) >= 0.5:
             # rendered picture: element-level motion timeline, key-frame strip and hex palette for a code remake
@@ -138,6 +186,10 @@ def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, 
         dl, dp = top(probs)
         LOG.info("%s %s-%s det=%s(%.0f%%) %s", sid, fmt_time(s.start), fmt_time(s.end), dl, dp * 100, facts.get("temporal_family"))
 
+    for job in stills:
+        job.result()
+    still_pool.shutdown()
+
     # ---------------- VLM pass ------------------------------------------------------
     # "used" means at least one VLM answer actually came back; "status" says why not otherwise.
     vlm_info = {"used": False, "requested": use_vlm, "status": "off"}
@@ -151,31 +203,49 @@ def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, 
             client = VLMClient(cfg, out / "vlm_cache")
             vlm_info = {"used": False, "requested": True, "status": "failed", "model": cfg.describe(), "media": cfg.media, "errors": []}
 
-            def run_shot(rec: dict) -> None:
+            def run_unit(unit: list[dict]) -> None:
+                """One VLM call per unit: a single shot, or the jump-cut pieces of one take seen as one clip."""
+                first, last = unit[0], unit[-1]
+                span = last["end"] - first["start"]
                 media = []
                 if cfg.media in ("both", "video"):
-                    clip = cut_clip(video, rec["start"], min(rec["duration"], 12.0), out / "clips" / f"{rec['id']}.mp4", width=480)
+                    clip = cut_clip(video, first["start"], min(span, 12.0), out / "clips" / f"{first['id']}.mp4", width=480)
                     media.append((clip, "video/mp4"))
                 if cfg.media in ("both", "frames"):
-                    media += [(out / rec["assets"]["first_frame"], "image/jpeg"), (out / rec["assets"]["sheet"], "image/jpeg"),
-                              (out / rec["assets"]["last_frame"], "image/jpeg")]
-                dl, dp = top(rec["deterministic"]["probs"])
-                prompt = SHOT_PROMPT.format(hints=shot_hints(rec["features"], rec["deterministic"]["facts"], dl, dp)) + prompt_lang_note()
+                    mid = unit[len(unit) // 2]
+                    media += [(out / first["assets"]["first_frame"], "image/jpeg"), (out / mid["assets"]["sheet"], "image/jpeg"),
+                              (out / last["assets"]["last_frame"], "image/jpeg")]
+                lead = max(unit, key=lambda r: r["duration"])
+                dl, dp = top(lead["deterministic"]["probs"])
+                prompt = SHOT_PROMPT.format(hints=shot_hints(lead["features"], lead["deterministic"]["facts"], dl, dp))
+                if len(unit) > 1:
+                    prompt += TAKE_NOTE.format(n=len(unit), cuts=", ".join(f"{r['start'] - first['start']:.2f}" for r in unit[1:]))
+                prompt += prompt_lang_note()
+                fallback = None
                 try:
-                    rec["vlm"] = normalize_shot_result(client.ask_json(prompt, media))
+                    raw = client.ask_json(prompt, media)
                 except Exception as exc:  # keep going; deterministic result stands
+                    raw = None
                     if cfg.media == "both":
                         try:
-                            frames_only = [m for m in media if m[1] != "video/mp4"]
-                            rec["vlm"] = normalize_shot_result(client.ask_json(prompt, frames_only))
-                            rec["vlm"]["_fallback"] = "frames_only"
-                            return
+                            raw = client.ask_json(prompt, [m for m in media if m[1] != "video/mp4"])
+                            fallback = "frames_only"
                         except Exception as exc2:  # pragma: no cover
                             exc = exc2
-                    vlm_info["errors"].append(f"{rec['id']}: {str(exc)[:160]}")
+                    if raw is None:
+                        vlm_info["errors"].append(f"{first['id']}: {str(exc)[:160]}")
+                        return
+                answers = take_results(raw, len(unit)) if len(unit) > 1 else [raw]
+                for i, (rec, ans) in enumerate(zip(unit, answers)):
+                    rec["vlm"] = normalize_shot_result(ans)
+                    if fallback:
+                        rec["vlm"]["_fallback"] = fallback
+                    if len(unit) > 1:
+                        rec["vlm"]["take"] = {"shots": [r["index"] for r in unit], "piece": i + 1}
 
+            units = vlm_units(shot_records, max_shots_vlm)
             with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-                list(pool.map(run_shot, shot_records[:max_shots_vlm]))
+                list(pool.map(run_unit, units))
             if whole_vlm:
                 try:
                     low = cut_clip(video, 0, info.duration, out / "clips" / "whole_480p.mp4", width=480, audio=True, crf=30)
@@ -183,9 +253,9 @@ def decompose(video: str | Path, out_dir: str | Path, *, use_vlm: bool = False, 
                     whole = normalize_whole(client.ask_json(WHOLE_PROMPT.format(shots=cuts) + prompt_lang_note(), [(low, "video/mp4")], max_tokens=6000))
                 except Exception as exc:
                     vlm_info["errors"].append(f"whole: {str(exc)[:160]}")
-            asked = shot_records[:max_shots_vlm]
+            asked = [r for u in units for r in u]
             ok_shots = sum(1 for r in asked if r.get("vlm"))
-            vlm_info.update(ok_shots=ok_shots, asked_shots=len(asked), whole_ok=whole is not None)
+            vlm_info.update(ok_shots=ok_shots, asked_shots=len(asked), calls=len(units), whole_ok=whole is not None)
             if ok_shots == len(asked) and (whole is not None or not whole_vlm):
                 vlm_info.update(used=True, status="ok")
             elif ok_shots or whole is not None:
@@ -234,6 +304,13 @@ def _ai_or_live_doubt(label: str, facts: dict, prov: dict, vctx: dict, seen_live
     seen_live: how strongly the image readers (VLM / agent) think the shot was filmed."""
     if label not in ("ai_video", "live_action") or prov.get("aigc"):
         return None
+    hints = facts.get("film_hints") or []
+    if hints and not seen:
+        # a letterboxed picture: a film recap or compilation looks exactly like this, and so can an AI drama
+        return T("{l}还是影视片段待确认：{h}；剪进来的影视剧画面和{l}在像素上分不开，需要看图（认得出的演员或剧集、台标、群演和布景的规模）",
+                 "{l} or film / TV footage, to confirm: {h}; a clip cut from a film or series cannot be told from {l} by pixels, needs an image reader "
+                 "(recognisable actors or series, a channel logo, the scale of extras and sets)",
+                 l=LABEL_ZH[label], h=join(FILM_HINT_ZH[k] for k in hints))
     if label == "ai_video" and facts.get("pulldown") in PULLDOWN_24 and not (prov.get("hints") or {}).get("generator"):
         # a cinema / mirrorless camera shooting 24p and exported at 30 fps leaves the same cadence as a generator:
         # measured on a phone clip converted 30 -> 24 -> 30, the tools call it AI at 89% (eval/RESULTS.md 2026-11-01)
@@ -241,8 +318,8 @@ def _ai_or_live_doubt(label: str, facts: dict, prov: dict, vctx: dict, seen_live
             return T("AI 还是 24p 相机实拍待确认：帧率痕迹只说明素材是 24fps 源，看图的一方认为是实拍，又没有 AIGC 标识",
                      "AI or 24p camera footage, to confirm: the frame-rate marks only say the source was 24fps, the image reader calls it live action, and there is no AIGC label")
         if not seen:
-            return T("AI 还是 24p 相机实拍待确认：只有帧率证据（24fps 源）、没有 AIGC 标识，需要看图确认",
-                     "AI or 24p camera footage, to confirm: only frame-rate evidence (24fps source) and no AIGC label, needs an image reader")
+            return T("AI 还是 24p 相机实拍 / 影视片段待确认：只有帧率证据（24fps 源，电影和电视剧也是这个帧率）、没有 AIGC 标识，需要看图确认",
+                     "AI, 24p camera footage or film / TV footage, to confirm: only frame-rate evidence (a 24fps source, which films and TV share) and no AIGC label, needs an image reader")
     if label == "ai_video" and facts.get("pulldown") == "interpolated" and not (prov.get("hints") or {}).get("generator"):
         # a sharpness rhythm with no duplicate frames: a re-encode whose platform tags were stripped leaves the same rhythm
         if seen_live >= 0.5:
@@ -483,6 +560,7 @@ def finalize(breakdown: dict, out: Path, engine: str | None = None) -> dict:
         if not doubt and decided != "user" and label in UNMEASURED and not (rec.get("vlm") and rec.get("review")):
             doubt = (T("{l}只有一方看图判断（工具测不出这一类）：", "{l} rests on a single image reader (the tools cannot measure this class): ", l=LABEL_ZH[label]) +
                      (T("定格动画和 AI 视频、实拍容易混", "stop motion is easily confused with AI video and live action") if label == "stop_motion"
+                      else T("影视片段和 AI 短剧、自己拍的实拍容易混", "film / TV footage is easily confused with AI dramas and self-shot footage") if label == "film_footage"
                       else T("2D 动画和代码动效、AI 视频容易混", "2D animation is easily confused with code-driven motion graphics and AI video")) + T("，请再看一眼", ", take another look"))
         if doubt:
             rec["base"]["confidence"] = round(min(conf, DOUBT_CAP), 3)
@@ -506,6 +584,9 @@ def finalize(breakdown: dict, out: Path, engine: str | None = None) -> dict:
         if (rec.get("features") or {}).get("measured_region"):
             rec["base"]["evidence"].append(T("画面统计只在贴纸/动图之外的区域测量（x{:.0%} y{:.0%} 宽{:.0%} 高{:.0%}）",
                                              "Picture statistics measured only outside the sticker / GIF region (x{:.0%} y{:.0%} w{:.0%} h{:.0%})").format(*rec["features"]["measured_region"]))
+        if (rec.get("features") or {}).get("picture_box"):
+            rec["base"]["evidence"].append(T("画面嵌在黑边里（画面框 x{:.0%} y{:.0%} 宽{:.0%} 高{:.0%}），画面统计只在框内测量",
+                                             "The picture sits inside black bars (box x{:.0%} y{:.0%} w{:.0%} h{:.0%}); picture statistics measured inside the box only").format(*rec["features"]["picture_box"]))
         # imported real material: full-frame from the base label, embedded regions only where
         # the frame is a rendered layout (photographic bases would trip the region detector)
         rendered_frame = label in ("code_render", "screen_capture", "cg_3d") or (label in ("static_hold", "still_motion") and img_src in ("graphic", "screenshot"))
@@ -516,6 +597,14 @@ def finalize(breakdown: dict, out: Path, engine: str | None = None) -> dict:
                                            seen or None, moving=fam != "frozen")
         if user.get("real_material") is not None:
             _user_real(rec["material"], bool(user["real_material"]))
+        elif label == "live_action" and not seen and rec["base"]["confidence"] < 0.6:
+            # pixels alone cannot tell the author's own footage from a cut-in film / drama clip: say so instead of
+            # promising "the user's material" (still counted as real material, only the wording changes)
+            note = T("（自己拍的还是影视片段，看图确认）", " (own footage or a film / drama clip, confirm by looking)")
+            rec["material"]["origin_zh"] += note
+            for it in rec["material"]["items"]:
+                if it["kind"] == "real_footage" and it["region"] == "full":
+                    it["kind_zh"] += note
         rec["verdict"] = verdict_text(label, img_src, rec["layers"])
         rec.pop("ai_edits", None)
         if label in ("live_action", "stop_motion"):
@@ -552,6 +641,10 @@ def finalize(breakdown: dict, out: Path, engine: str | None = None) -> dict:
         verdict += T("（其中 {r:.0%} 时长实拍还是 AI 待确认：平台转码抹掉了噪声证据，需开 VLM 或人工看画面）",
                      " ({r:.0%} of the duration is live action or AI, to confirm: the platform transcode erased the noise evidence, needs a VLM pass or a human look at the frames)",
                      r=unsure / total)
+    if (vctx.get("film_hint_share") or 0) > 0.3 and not any(r["base"]["label"] == "film_footage" for r in shot_records):
+        verdict += T("（其中 {r:.0%} 时长有影视片段线索（黑边版式），可能是影视解说或混剪，需看图确认）",
+                     " ({r:.0%} of the duration carries film / TV hints (letterbox layout), possibly a film recap or compilation, to confirm by looking)",
+                     r=vctx["film_hint_share"])
     doubtful = sum(r["duration"] for r in shot_records if r["base"].get("uncertain"))
     if doubtful / total > 0.3 and not (unsure / total > 0.3 and not any(visual_opinion(r) for r in shot_records)):
         verdict += T("（其中 {r:.0%} 时长实拍还是 AI 证据不足，待确认）", " ({r:.0%} of the duration lacks evidence for live action vs AI, to confirm)", r=doubtful / total)
@@ -685,7 +778,7 @@ def finalize(breakdown: dict, out: Path, engine: str | None = None) -> dict:
     breakdown["production_plan"] = production_plan(breakdown, out, engine=engine)
     summary["production"] = breakdown["production_plan"]["summary"]
     breakdown["summary"] = summary
-    write_json(out / "breakdown.json", breakdown)
+    write_json(out / "breakdown.json", breakdown, compact=True)
     from .report import write_reports
 
     write_reports(breakdown, out)

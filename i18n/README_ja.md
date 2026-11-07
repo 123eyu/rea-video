@@ -120,7 +120,7 @@ AI キャラクターの会話 + コードで作った UI + 8 秒の実際の画
 
 ## リメイク
 
-rea-video で動画を分析したあと、[cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) のリメイクレシピで新しいバージョンを生成します。カメラ、動き、テンポ、トランジションはオリジナルに従い、選んだ要素だけが差し替えられます。
+rea-video で動画を分析したあと、[capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) のリメイクレシピで新しいバージョンを生成します。カメラ、動き、テンポ、トランジションはオリジナルに従い、選んだ要素だけが差し替えられます。
 これらの結果は、セルフホストの MiniMax H3 で生成しました。オリジナルのショットを動きの参照とし、要素を差し替えたキーフレーム（gpt-image-2）で見た目を決めています。
 以下は、OiiOii が WeChat の記事で紹介した 3 つのリメイクです。それぞれについて 2 つのバージョンを作りました。OiiOii と同じ差し替えのバージョンと、被写体、舞台、小道具も差し替えたバージョンです。
 各 GIF では、オリジナル、OiiOii のリメイク、私たちのリメイク、要素を差し替えたバージョンの 4 つを同期して再生しています。
@@ -196,7 +196,7 @@ rea-video は動画をレンダリングしません。ショットごとに、�
 <details>
 <summary>動画全体を自動でリメイクできますか？</summary>
 
-一部は可能です。[capsule-cinema](https://github.com/JuneYaooo/cheap-claude-video) をインストールすると、AI のショットが生成され、元のタイムライン上に自動で配置されます。実写のショットは撮影プランに従って撮影し、コードのショットはエージェントが Remotion プロジェクトとして作成します。[docs/replicate.md](../docs/replicate.md) をご覧ください。
+一部は可能です。[capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) をインストールすると、AI のショットが生成され、元のタイムライン上に自動で配置されます。実写のショットは撮影プランに従って撮影し、コードのショットはエージェントが Remotion プロジェクトとして作成します。[docs/replicate.md](../docs/replicate.md) をご覧ください。
 
 </details>
 

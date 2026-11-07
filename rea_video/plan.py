@@ -23,6 +23,7 @@ LABEL_ROUTE = {
     "static_hold": ("R18-static-hold", "local_ffmpeg", None),
     "anim_2d": ("R19-2d-animation", "capsule_cinema", "first_last_frame"),
     "stop_motion": ("R20-stop-motion", "capsule_cinema", "image_to_video"),
+    "film_footage": ("R21-film-footage", "source_footage", None),
 }
 NOTE = LangDict({
     "ai_video": "原片为 AI 生成：取原镜头首尾帧做首尾帧生成，可高度还原构图与动作；换主体时先用图像模型改首帧",
@@ -35,6 +36,7 @@ NOTE = LangDict({
     "static_hold": "静帧：一张图定格即可",
     "anim_2d": "2D 动画：先出角色设定图定画风，再首尾帧生成；要精确口型和动作时做 AE / Live2D / Spine 工程",
     "stop_motion": "定格动画：首选真的拍（手机固定 + 定格 App，每秒约 12 张）；AI 生成只能近似顿挫感",
+    "film_footage": "影视片段：画面剪自已有的电影/电视剧/短剧，复刻要找到原片对应片段再剪（版权属于片方，商用要授权）；不用原片时，按同样景别、机位和打光自己拍，或用 AI 做近似画面",
 }, en={
     "ai_video": "Source is AI-generated: use the shot's first and last frames for first/last-frame generation to closely match composition and motion; to change the subject, edit the first frame with an image model first",
     "live_action": "Source is live action: reshoot per the shooting plan (shot size / camera setup / lighting); only fall back to AI image-to-video (first frame as reference) when a shoot is not possible",
@@ -46,6 +48,7 @@ NOTE = LangDict({
     "static_hold": "Static frame: one held image is enough",
     "anim_2d": "2D animation: make a character sheet to lock the style, then first/last-frame generation; for precise lip sync and motion, build an AE / Live2D / Spine project",
     "stop_motion": "Stop motion: shooting for real is the first choice (phone locked off + a stop-motion app, about 12 frames per second); AI generation only approximates the stepped feel",
+    "film_footage": "Film / TV footage: the picture is cut from an existing film, series or short drama; a remake has to find the same clip in the source and cut it (rights belong to the studio, commercial use needs a licence); without the source, shoot it yourself with the same shot size, camera setup and lighting, or approximate it with AI",
 })
 # AI edits on filmed footage: what was done, which routing rule rebuilds it, how in one line
 AI_EDITS = {

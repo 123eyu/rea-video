@@ -120,7 +120,7 @@ Entièrement filmé : un téléphone fixé en plongée, un tapis, une seule posi
 
 ## Remakes
 
-Une fois la vidéo décortiquée par rea-video, la recette de remake de [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) génère une nouvelle version : caméra, mouvements, rythme et transitions suivent l'original, seuls les éléments que vous choisissez sont remplacés.
+Une fois la vidéo décortiquée par rea-video, la recette de remake de [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) génère une nouvelle version : caméra, mouvements, rythme et transitions suivent l'original, seuls les éléments que vous choisissez sont remplacés.
 Ces résultats ont été générés avec un MiniMax H3 auto-hébergé : le plan original sert de référence de mouvement, et des images clés avec les éléments remplacés (gpt-image-2) définissent le rendu.
 Voici trois remakes qu'OiiOii a présentés dans ses articles WeChat. Pour chacun, nous avons fait deux versions : le même remplacement qu'OiiOii, et une qui remplace aussi le sujet, le décor et les accessoires.
 Chaque GIF montre quatre versions en synchronisation : l'original, le remake d'OiiOii, notre remake et la version avec éléments remplacés.
@@ -196,7 +196,7 @@ Non. Le mode outils seuls fonctionne hors ligne et gratuitement, et il est déj�
 <details>
 <summary>Peut-il refaire toute la vidéo automatiquement ?</summary>
 
-En partie. Avec [capsule-cinema](https://github.com/JuneYaooo/cheap-claude-video) installé, les plans IA sont générés et replacés automatiquement sur la timeline d'origine. Les plans réels, vous les filmez d'après le plan de tournage ; les plans en code, l'agent les écrit sous forme de projet Remotion. Voir [docs/replicate.md](../docs/replicate.md).
+En partie. Avec [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) installé, les plans IA sont générés et replacés automatiquement sur la timeline d'origine. Les plans réels, vous les filmez d'après le plan de tournage ; les plans en code, l'agent les écrit sous forme de projet Remotion. Voir [docs/replicate.md](../docs/replicate.md).
 
 </details>
 

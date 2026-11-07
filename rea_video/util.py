@@ -17,11 +17,36 @@ def setup_logging(verbose: bool = False) -> None:
     logging.basicConfig(level=level, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S", stream=sys.stderr)
 
 
-def write_json(path: Path, data: Any) -> Path:
+def write_json(path: Path, data: Any, compact: bool = False) -> Path:
+    """compact=True: no indentation (about half the size; for large machine-read files like breakdown.json)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=_json_default) + "\n", encoding="utf-8")
+    text = (json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=_json_default) if compact
+            else json.dumps(data, ensure_ascii=False, indent=2, default=_json_default))
+    path.write_text(text + "\n", encoding="utf-8")
     return path
+
+
+def dumps_rows(data: dict) -> str:
+    """JSON with one top-level key per line and every list item on its own line.
+
+    For files an agent reads or edits (review tasks / answers): one shot per line keeps them
+    grep-able and editable by id without the token cost of full indentation."""
+    def one(v):
+        return json.dumps(v, ensure_ascii=False, separators=(",", ":"), default=_json_default)
+
+    lines = []
+    for k, v in data.items():
+        if isinstance(v, list) and v:
+            body = ",\n".join("  " + one(x) for x in v)
+            lines.append(f"{one(k)}:[\n{body}\n]")
+        elif isinstance(v, dict) and any(isinstance(x, list) and x for x in v.values()):
+            lines.append(f"{one(k)}:{{\n" + ",\n".join(
+                f" {one(kk)}:[\n" + ",\n".join("  " + one(x) for x in vv) + "\n ]" if isinstance(vv, list) and vv else f" {one(kk)}:{one(vv)}"
+                for kk, vv in v.items()) + "\n}")
+        else:
+            lines.append(f"{one(k)}:{one(v)}")
+    return "{\n" + ",\n".join(lines) + "\n}\n"
 
 
 def read_json(path: Path) -> Any:

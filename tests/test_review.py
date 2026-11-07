@@ -14,7 +14,13 @@ def test_review_roundtrip_overrides_and_reports(media, tmp_path, capsys):
     tasks = json.loads((out / "review_tasks.json").read_text(encoding="utf-8"))
     assert tasks["shots"] and "label_probs" in tasks["instructions"]
     assert (out / tasks["shots"][0]["images"]["sheet"]).is_file()
+    # lean task file: the sheet already holds first/last frames, zoom command is one template, rows are one line each
+    assert set(tasks["shots"][0]["images"]) <= {"sheet", "strip"}
+    assert "{start}" in tasks["zoom_cmd"] and "zoom_cmd" not in tasks["shots"][0]
+    assert all(line.startswith("  {\"id\"") for line in (out / "review_tasks.json").read_text(encoding="utf-8").splitlines()
+               if '"id":"shot_' in line and line.startswith("  "))
     ans = json.loads((out / "review_answers.json").read_text(encoding="utf-8"))
+    assert all(a["label_probs"] == {} for a in ans["shots"])
     first = ans["shots"][0]
     ranked = sorted(b["shots"][0]["deterministic"]["probs"].items(), key=lambda kv: -kv[1])
     second = ranked[1][0]  # a lone reader may pick the tools' runner-up (but not a label they rule out)
@@ -34,7 +40,9 @@ def test_review_roundtrip_overrides_and_reports(media, tmp_path, capsys):
     assert "tester 看图复核 1/" in b2["summary"]["vlm"]
     md = (out / "report.md").read_text(encoding="utf-8")
     assert "agent 看图融合" in md and "手持拍摄厨房台面" in md
-    # unanswered shots (all-zero probs) are skipped, not applied
+    # unanswered shots (empty probs) are skipped silently: one count line, not one line per shot
+    assert ("没作答、已跳过" in printed) == (len(b2["shots"]) > 1) and "shot_002: label_probs" not in printed
+    # unanswered shots are not applied
     assert all("review" not in r for r in b2["shots"][1:])
     # a lone reader cannot push a code-render shot to live action: it is outside the tools' top two
     if "live_action" not in (ranked[0][0], second):

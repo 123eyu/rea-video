@@ -160,6 +160,22 @@ def ocr_frames(frames: list[np.ndarray], times: list[float], max_frames: int = 4
     return results
 
 
+def shot_ocr_items(whole: list[dict] | None, step: float, start: float, end: float) -> list[dict] | None:
+    """The whole-video OCR pass already read this shot: its hits in [start, end), or None when that pass is
+    missing or too sparse here (fewer than one read per 0.6 s, or no read inside the shot)."""
+    if whole is None or not step or step > 0.6:
+        return None
+    first_read = np.ceil(start / step - 1e-6) * step  # reads happen at 0, step, 2*step, ...
+    if first_read >= end:
+        return None
+    return [dict(it, band=_band(it["bbox"][1] + it["bbox"][3] / 2, 1)) for it in whole if start <= it["t"] < end]
+
+
+def shot_ocr_frames(duration: float) -> int:
+    """Frames to OCR for a shot of this length when the whole-video pass is not there: one per ~0.75 s, 1 to 4."""
+    return int(min(4, max(1, np.ceil(duration / 0.75))))
+
+
 def summarize_text(items: list[dict]) -> dict:
     """Group OCR hits into tracks: same band + similar x-position."""
     if not items:

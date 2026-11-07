@@ -120,7 +120,7 @@ AI 캐릭터 대화 + 코드로 만든 UI + 실제 화면 녹화 8초. 대화 �
 
 ## 리메이크
 
-rea-video로 영상을 분석한 뒤 [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video)의 리메이크 레시피로 새 버전을 생성합니다. 카메라, 움직임, 템포, 전환은 원본을 따르고, 선택한 요소만 바뀝니다.
+rea-video로 영상을 분석한 뒤 [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema)의 리메이크 레시피로 새 버전을 생성합니다. 카메라, 움직임, 템포, 전환은 원본을 따르고, 선택한 요소만 바뀝니다.
 아래 결과는 자체 호스팅한 MiniMax H3로 생성했습니다. 원본 샷을 모션 레퍼런스로, 요소를 바꾼 키프레임(gpt-image-2)을 룩 레퍼런스로 사용했습니다.
 아래는 OiiOii가 WeChat 글에서 소개한 리메이크 세 편입니다. 각각 두 가지 버전을 만들었습니다. 하나는 OiiOii와 같은 요소를 바꾼 버전, 다른 하나는 주체, 배경, 소품까지 바꾼 버전입니다.
 각 GIF는 원본, OiiOii 리메이크, 우리 리메이크, 요소 교체 버전의 네 가지를 동시에 재생합니다.
@@ -196,7 +196,7 @@ rea-video는 영상을 렌더링하지 않습니다. 샷마다 촬영한 것인�
 <details>
 <summary>영상 전체를 자동으로 리메이크할 수 있나요?</summary>
 
-일부는 가능합니다. [capsule-cinema](https://github.com/JuneYaooo/cheap-claude-video)를 설치하면 AI 샷이 자동으로 생성되어 원본 타임라인에 배치됩니다. 실사 샷은 촬영 계획에 따라 직접 촬영하고, 코드 샷은 에이전트가 Remotion 프로젝트로 작성합니다. [docs/replicate.md](../docs/replicate.md)를 참고하세요.
+일부는 가능합니다. [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema)를 설치하면 AI 샷이 자동으로 생성되어 원본 타임라인에 배치됩니다. 실사 샷은 촬영 계획에 따라 직접 촬영하고, 코드 샷은 에이전트가 Remotion 프로젝트로 작성합니다. [docs/replicate.md](../docs/replicate.md)를 참고하세요.
 
 </details>
 

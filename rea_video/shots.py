@@ -13,6 +13,10 @@ import numpy as np
 from .media import VideoInfo, frame_times, iter_frames
 
 THUMB_W = 96
+# jump cuts (same camera, subject jumps): share of the frame that changes, how far above the frames on both
+# sides, frames on each side that must stay quiet, and how little the picture may drift back (see _returns)
+JUMP_MIN_CHANGED, JUMP_RATIO, JUMP_QUIET, JUMP_MIN_RETURN = 0.17, 2.5, 2, 0.7
+SHORT_SHOT_S = 0.12  # shortest shot kept between two clean hard cuts (4 frames at 30 fps)
 
 
 @dataclass
@@ -139,8 +143,16 @@ def detect_shots(track: FrameTrack, min_shot_s: float = 0.35, cut_threshold: flo
         # frames; a filmed screen whose content changes keeps sensor noise, 0.002-0.03, and is not a cut)
         still_swap = (s > cut_threshold and track.hist_dist[i] > 0.25 and chg[i] > 0.18 and chg_base[i] < 0.01
                       and s > base[i] * 5 + 0.1 and i >= 3 and float(track.pix_diff[i - 3:i].max()) < 1e-3)
-        if strong or relative or still_swap:
-            boundaries[i] = ("cut", float(max(s, chg[i])))
+        jump = _jump_cut(track, i)
+        if strong or relative or still_swap or jump:
+            # a muzzle flash / strobe, or the frame where a one- or two-frame flash or glitch ends: the picture
+            # is back to what it was, so nothing was cut
+            if _brief_flash(track, i) or _back_to_before(track.thumbs, i):
+                continue
+            # a jump cut keeps the camera setup: same colours, less than half the frame changes. Shots joined by
+            # jump cuts are pieces of one take (one VLM look, one generation in the remake plan)
+            same_take = jump and track.hist_dist[i] < 0.4 and chg[i] < 0.5
+            boundaries[i] = ("jump" if same_take else "cut", float(max(s, chg[i])))
 
     # 2) fades through black / white: luma dips to an extreme and comes back
     lo_l = min(10.0, float(np.percentile(track.luma, 50)) * 0.35)
@@ -193,19 +205,28 @@ def detect_shots(track: FrameTrack, min_shot_s: float = 0.35, cut_threshold: flo
 
     beat_marks = [b for b, _ in _mg_beats(track, boundaries, fps)]
 
-    # assemble shots, enforce minimum length (merge short ones into previous)
+    # assemble shots, enforce minimum length. Boundaries closer than that are one transition (a flash, a
+    # blended frame, a whip) or a flash next to a cut: keep the strongest, not just the first, so a flash a few
+    # frames before a cut does not swallow it. A very short shot survives when both of its cuts are clean
+    # hard cuts (a 4-frame insert in a fast edit, a cover frame before the first shot).
     min_len = max(1, int(round(min_shot_s * fps)))
-    cuts = sorted(boundaries)
+    short_len = max(1, int(round(SHORT_SHOT_S * fps)))
+    kept: list[int] = []
+    for b in sorted(boundaries):
+        prev = kept[-1] if kept else 0
+        gap = b - prev
+        if gap >= min_len or (gap >= short_len and _clean_cut(boundaries, b) and (not kept or _clean_cut(boundaries, prev))
+                              and float(track.changed[prev + 1:b].max()) < 0.3):  # a held insert, not transition frames
+            kept.append(b)
+        elif kept and boundaries[b][1] > boundaries[prev][1] and b - (kept[-2] if len(kept) > 1 else 0) >= short_len:
+            kept[-1] = b
+    if kept and n - kept[-1] < min_len:
+        kept.pop()  # a short tail joins the last shot
     shots: list[Shot] = []
     start, trans, bscore = 0, "start", 0.0
-    for b in cuts + [n]:
-        if b - start < min_len and b != n:
-            continue
-        if b == n and shots and b - start < min_len:
-            shots[-1].end_frame = n
-            break
+    for b in kept + [n]:
         shots.append(Shot(index=len(shots) + 1, start_frame=start, end_frame=b, fps=fps, transition_in=trans, boundary_score=bscore,
-                              times=track.times))
+                          times=track.times))
         if b < n:
             trans, bscore = boundaries[b]
         start = b
@@ -216,6 +237,73 @@ def detect_shots(track: FrameTrack, min_shot_s: float = 0.35, cut_threshold: flo
             if shot.flash_s:
                 shot.transition_in = "flash"
     return shots
+
+
+def _clean_cut(boundaries: dict[int, tuple[str, float]], b: int) -> bool:
+    kind, strength = boundaries[b]
+    return kind in ("cut", "jump") and strength >= 0.35
+
+
+def _brief_flash(track: FrameTrack, i: int) -> bool:
+    """A muzzle flash / strobe / light flicker: the frame is brighter than just before, the brightness is
+    mostly gone two frames later, and the picture comes back. A flash transition into a new shot decays
+    more slowly and reveals a different picture, so it stays a cut."""
+    pre = float(track.luma[max(0, i - 3):i].min())
+    rise = float(track.luma[i]) - pre
+    if rise <= 5.0 or i + 2 >= track.n:
+        return False
+    return float(track.luma[i + 2]) - pre < 0.5 * rise and _returns(track.thumbs, i) < 0.6
+
+
+def _back_to_before(thumbs: list[np.ndarray], i: int) -> bool:
+    """Frame i looks like the picture two or three frames earlier again: the end of a flash or glitch
+    of one or two frames, not a cut."""
+    if i < 3:
+        return False
+    cur = thumbs[i].astype(np.float32)
+    first = float(np.abs(cur - thumbs[i - 1].astype(np.float32)).mean()) + 1e-6
+    return min(float(np.abs(cur - thumbs[j].astype(np.float32)).mean()) for j in (i - 3, i - 2)) < 0.3 * first
+
+
+def _returns(thumbs: list[np.ndarray], i: int, span: int = 4) -> float:
+    """How far the picture stays away after frame i, relative to the jump into frame i: ~1 for a cut
+    (the new shot never looks like the old one), well below 1 when a flash or strobe fades back. The
+    reference is any of the three frames before i, so the second frame of a two-frame flash also counts."""
+    n = len(thumbs)
+    if i < 1 or i + 1 >= n:
+        return 1.0
+    cur = thumbs[i].astype(np.float32)
+    first = float(np.abs(cur - thumbs[i - 1].astype(np.float32)).mean()) + 1e-6
+    best = float("inf")
+    for j in range(max(0, i - 3), i):
+        a = thumbs[j].astype(np.float32)
+        jump = float(np.abs(cur - a).mean()) + 1e-6
+        if jump < 0.2 * first:
+            continue  # frame j already looks like frame i: not a reference for "before"
+        later = min(float(np.abs(thumbs[k].astype(np.float32) - a).mean()) for k in range(i + 1, min(n, i + 1 + span)))
+        best = min(best, later / jump)
+    return best if best != float("inf") else 1.0
+
+
+def _jump_cut(track: FrameTrack, i: int) -> bool:
+    """Same camera, same background, the subject's position jumps: a talking-head jump cut or a punch-in.
+    Too little of the frame changes for the cut rules above, but the change happens in one frame while the
+    frames on both sides are steady, and nothing similar happens just before or after (frame-skipped
+    'staccato' motion jumps every second frame)."""
+    n = track.n
+    if i < 4 or i + 4 > n:
+        return False
+    c, d = track.changed, track.pix_diff
+    if c[i] < JUMP_MIN_CHANGED:
+        return False
+    side_c = max(float(np.median(c[max(0, i - 6):i])), float(np.median(c[i + 1:i + 7])))
+    side_d = max(float(np.median(d[max(0, i - 6):i])), float(np.median(d[i + 1:i + 7])))
+    if c[i] < JUMP_RATIO * (side_c + 0.02) or d[i] < 2.0 * (side_d + 0.004):
+        return False
+    near = np.concatenate([c[i - JUMP_QUIET:i], c[i + 1:i + 1 + JUMP_QUIET]])
+    if float(near.max()) > 0.5 * float(c[i]):
+        return False
+    return _returns(track.thumbs, i) >= JUMP_MIN_RETURN
 
 
 def _flash(luma: np.ndarray, start: int, end: int, fps: float) -> float:

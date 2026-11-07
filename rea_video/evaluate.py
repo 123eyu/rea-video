@@ -167,19 +167,22 @@ def packaging_check(truth_path: str | Path, pack: dict, sfx: list[dict] | None =
     return out
 
 
-def boundary_f1(pred: list[float], gt: list[float], tol: float = 0.1) -> dict:
+def boundary_f1(pred: list[float], gt: list[float], tol: float = 0.1, ignore: list[float] | None = None) -> dict:
+    """Cut precision / recall. `ignore`: boundaries the labeller could not decide; a predicted cut there is
+    neither right nor wrong."""
     used = set()
-    tp = 0
+    tp = fp = 0
     for p in pred:
-        for i, g in enumerate(gt):
-            if i not in used and abs(p - g) <= tol:
-                used.add(i)
-                tp += 1
-                break
-    prec = tp / len(pred) if pred else 1.0
+        hit = next((i for i, g in enumerate(gt) if i not in used and abs(p - g) <= tol), None)
+        if hit is not None:
+            used.add(hit)
+            tp += 1
+        elif not any(abs(p - u) <= tol for u in ignore or []):
+            fp += 1
+    prec = tp / (tp + fp) if tp + fp else 1.0
     rec = tp / len(gt) if gt else 1.0
     f1 = 2 * prec * rec / (prec + rec) if prec + rec else 0.0
-    return {"precision": round(prec, 3), "recall": round(rec, 3), "f1": round(f1, 3)}
+    return {"precision": round(prec, 3), "recall": round(rec, 3), "f1": round(f1, 3), "tp": tp, "fp": fp, "fn": len(gt) - tp}
 
 
 def evaluate(labels_path: Path, out: Path, use_vlm: bool = False, ocr: bool = True, reuse: bool = True, only: set[str] | None = None,
@@ -283,7 +286,8 @@ def evaluate(labels_path: Path, out: Path, use_vlm: bool = False, ocr: bool = Tr
             sfx_truth = read_json(Path(_expand(entry["sfx_truth"]))) if entry.get("sfx_truth") else None
             row["packaging"] = packaging_check(entry["packaging_truth"], b["packaging"], (b.get("audio_plan") or {}).get("sfx_merged", []), sfx_truth)
         if "cuts" in entry:
-            row["cut_f1"] = boundary_f1([s["start"] for s in b["shots"][1:]], entry["cuts"], tol=float(entry.get("cut_tolerance", 0.1)))
+            row["cut_f1"] = boundary_f1([s["start"] for s in b["shots"][1:]], entry["cuts"], tol=float(entry.get("cut_tolerance", 0.1)),
+                                         ignore=entry.get("cuts_uncertain"))
         if entry.get("image_source"):
             srcs = {s["base"].get("image_source") for s in b["shots"]}
             row["image_source_ok"] = entry["image_source"] in srcs
@@ -321,6 +325,10 @@ def evaluate(labels_path: Path, out: Path, use_vlm: bool = False, ocr: bool = Tr
     cuts = [r["cut_f1"]["f1"] for r in rows if "cut_f1" in r]
     if cuts:
         summary["cut_f1_mean"] = round(sum(cuts) / len(cuts), 3)
+        tp, fp, fn = (sum(r["cut_f1"][k] for r in rows if "cut_f1" in r) for k in ("tp", "fp", "fn"))
+        summary["cuts"] = {"truth": tp + fn, "found": tp, "false": fp,
+                           "recall": round(tp / (tp + fn), 3) if tp + fn else None,
+                           "precision": round(tp / (tp + fp), 3) if tp + fp else None}
     result = {"summary": summary, "rows": rows,
               "confusion_seconds": {g: {p: round(v, 1) for p, v in ps.items() if v} for g, ps in confusion.items() if any(ps.values())}}
     write_json(out / "eval_result.json", result)

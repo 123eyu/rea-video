@@ -37,10 +37,10 @@ MODE_ZH = LangDict({"music": "背景音乐", "voice": "人声", "sfx": "音效"}
 # how a shot gets remade, in words (the rule ids stay in breakdown.json for agents)
 ROUTE_ZH = LangDict({"ai_video": "AI 生成（首尾帧）", "live_action": "实拍", "avatar": "TTS + 数字人", "cg_3d": "AI 生成 / 3D 渲染",
                      "code_render": "代码渲染", "screen_capture": "录屏重建", "still_motion": "本地 ffmpeg 推拉", "static_hold": "静帧",
-                     "anim_2d": "AI 生成（2D 动画）", "stop_motion": "实拍定格"},
+                     "anim_2d": "AI 生成（2D 动画）", "stop_motion": "实拍定格", "film_footage": "找原片剪辑"},
                     en={"ai_video": "AI generation (first / last frame)", "live_action": "reshoot", "avatar": "TTS + avatar", "cg_3d": "AI generation / 3D render",
                         "code_render": "code render", "screen_capture": "screen recording", "still_motion": "local ffmpeg move", "static_hold": "static frame",
-                        "anim_2d": "AI generation (2D animation)", "stop_motion": "stop motion shoot"})
+                        "anim_2d": "AI generation (2D animation)", "stop_motion": "stop motion shoot", "film_footage": "cut from the source film"})
 SFX_SRC_ZH = LangDict({"vlm": "听到", "deterministic": "信号候选（低置信）", "review": "看图复核", "merged": "听到 + 信号"},
                       en={"vlm": "heard", "deterministic": "signal candidate (low confidence)", "review": "agent review", "merged": "heard + signal"})
 ENDING_ZH = LangDict({"natural_end": "自然结束", "fade_out": "淡出", "hard_cut": "硬切断"}, en={"natural_end": "ends naturally", "fade_out": "fades out", "hard_cut": "cut off hard"})
@@ -147,8 +147,8 @@ def _span(a, z) -> str:
 
 # ------------------------------------------------------------------ sections --------------------------------------
 
-TRANS_ZH = LangDict({"cut": "硬切", "flash": "闪亮切", "fade": "淡入淡出", "dissolve": "叠化", "mg_transition": "版式切换"},
-                    en={"cut": "cut", "flash": "flash cut", "fade": "fade", "dissolve": "dissolve", "mg_transition": "layout change"})
+TRANS_ZH = LangDict({"cut": "硬切", "jump": "跳剪", "flash": "闪亮切", "fade": "淡入淡出", "dissolve": "叠化", "mg_transition": "版式切换"},
+                    en={"cut": "cut", "jump": "jump cut", "flash": "flash cut", "fade": "fade", "dissolve": "dissolve", "mg_transition": "layout change"})
 
 
 def _head_md(b: dict) -> list[str]:

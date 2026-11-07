@@ -3,6 +3,7 @@
 # 视频文件不进仓库：放在 eval/media/articles/v01.mp4 … v13.mp4（编号对照见同目录 mapping.tsv）
 # 真值 = 文章作者对制作方式的说明 + 人工看画面；v02、v05、v06 真值不确定，不列入
 # 注意：v0.3 的转码/3D 规则是看过这批视频后加的，属于开发集，不是留出集
+# cuts：逐个看候选切点前后帧标出的切点真值（含跳剪、推近切、几帧的短镜头；闪光、火光、局部叠图不算）；cuts_uncertain 是看不准的位置，检测到也不算错
 videos:
   - id: art_v01_oiioii_remake          # a1 复刻成片：视频模型 + Harness
     path: eval/media/articles/v01.mp4
@@ -28,6 +29,8 @@ videos:
   - id: art_v11_tiktok_original        # a2 TikTok 带货原片：手机实拍（真实厨房、真手、男声口播）
     aspects: {format: {format: product}}   # 目测 2026-10-30：第一视角手持，手拿食材放进榨汁杯，无人脸
     path: eval/media/articles/v11.mp4
+    cuts: [0.73, 1.50, 2.20, 4.03, 5.77, 6.53, 7.23, 8.73, 12.97, 14.60, 18.67, 19.03]
+    cuts_uncertain: [3.27, 20.67]
     label: live_action
     real_material: true
   - id: art_v12_juicer_remake          # a2 OiiOii 榨汁杯复刻（带 AIGC 隐式标识）

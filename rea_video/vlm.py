@@ -10,6 +10,7 @@ REA_VLM_MEDIA = both | video | frames  (default both: a short clip as data:video
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import json
 import os
@@ -206,6 +207,7 @@ SHOT_PROMPT = """你是视频制作逆向工程专家。判断这个镜头的「
 - static_hold：静帧定格（图片或卡片停留不动）
 - anim_2d：2D 动画（手绘逐帧、Live2D、AE/Spine 角色动画、扁平插画风动画）：线条和平涂色块、角色有骨骼或逐帧动作，常见"一拍二"（每两帧才变一次）
 - stop_motion：定格动画（黏土、毛毡、纸偶、乐高等实物逐帧拍摄）：真实材质和灯光、动作一顿一顿、帧间轻微闪烁、指纹和纹理细节
+- film_footage：剪进来的已有影视作品画面（电影、电视剧、网剧、竖屏短剧的片段，影视解说、混剪、名场面合集常见）：认得出的演员或剧集、专业剧组的布光和多机位、大量群演和成套布景、片头片尾字幕、台标或平台水印、嵌在黑边里的宽画幅
 
 如果画面是实拍或写实画面，再拆「怎么拍、怎么打光」（aspects 里各项），纯图形/文字/界面画面这些字段写"不适用"。
 
@@ -216,6 +218,7 @@ SHOT_PROMPT = """你是视频制作逆向工程专家。判断这个镜头的「
 注意区分：卡通/3D 风格的 AI 视频（形变、闪烁、不精确）与真正的 3D 渲染（几何稳定、精确）；
 AI 生成的写实视频与实拍（看手、文字、背景细节、物理）；AI 生成的动画风视频（形变、线条游移）与真正的 2D 动画（线条稳定、按帧精确）；
 AI 仿定格风格（材质在帧间漂移）与真正的定格动画（同一实物、光照不变、只有逐帧位移）；
+影视片段（剪自已有的电影/电视剧/短剧：live_action 只用于视频作者或客户自己拍的画面）与 AI 短剧（脸过于完美且千人一面、手和文字出错、群演和背景稀少、物体形变）；"影视效果""剧情需要"这类免责声明在 AI 短剧解说里也常见，不能单独作为影视片段的证据；
 暗底发光粒子拼成的器官、人体、地球、分子等科普画面是代码渲染（粒子系统），不是 3D 实体模型，也不是 AI 视频或实拍：亮部由成千上万个点或细线组成、没有连续的明暗表面，常配 HUD 式章节牌和引线标注。
 代码绘制的画面没有材质纹理：大面积平滑渐变、纯色块、辉光、毛玻璃卡片、CSS 3D 翻转卡片都是代码渲染，不是 3D 渲染（3D 渲染有布料/木纹/金属等材质、有投影和物体间的光影关系）；分形缩放、plasma 之类彩虹色场是着色器生成，不是实拍或 AI 视频。
 
@@ -227,7 +230,7 @@ AI 仿定格风格（材质在帧间漂移）与真正的定格动画（同一�
 
 只返回 JSON，不要任何其他文字：
 {{
-  "label_probs": {{"live_action": 0, "ai_video": 0, "avatar": 0, "cg_3d": 0, "code_render": 0, "screen_capture": 0, "still_motion": 0, "static_hold": 0, "anim_2d": 0, "stop_motion": 0}},
+  "label_probs": {{"live_action": 0, "ai_video": 0, "avatar": 0, "cg_3d": 0, "code_render": 0, "screen_capture": 0, "still_motion": 0, "static_hold": 0, "anim_2d": 0, "stop_motion": 0, "film_footage": 0}},
   "image_source": "ai_image|photo|graphic|screenshot|unknown",
   "evidence": ["具体可见证据，尽量指明位置/时间"],
   "generator_guess": "可能的生成模型或工具（如 Seedance/Kling/Veo/Hailuo/Blender/Remotion/剪映 模板），无法判断写 unknown",
@@ -248,6 +251,33 @@ AI 仿定格风格（材质在帧间漂移）与真正的定格动画（同一�
 }}"""
 
 
+# appended to SHOT_PROMPT when one clip covers several jump-cut pieces of the same take
+TAKE_NOTE = """
+这段片子是同一机位、同一条素材剪成的 {n} 段（跳剪），后面几段从片段开头后 {cuts} 秒开始。
+制作方式、拍法和素材（label_probs、aspects、embedded_assets 等）对整段给一次即可；
+另外加一个 segments 数组，按顺序给每一段的内容，共 {n} 项：
+"segments": [{{"description": "这一段的主体、动作和结束状态", "replication": {{"video_prompt": "复刻这一段的中文视频提示词", "video_prompt_en": "same in English"}}}}]
+"""
+
+
+def take_results(raw: dict, n: int) -> list[dict]:
+    """Split one answer about a jump-cut take into per-piece answers: the shared verdict, with each piece's own
+    description and video prompt when the model gave one per piece."""
+    segs = raw.pop("segments", None)
+    segs = segs if isinstance(segs, list) and len(segs) == n else [None] * n
+    out = []
+    for seg in segs:
+        r = copy.deepcopy(raw)
+        if isinstance(seg, dict):
+            if isinstance(seg.get("description"), str) and seg["description"].strip():
+                r["description"] = seg["description"]
+            rep = seg.get("replication")
+            if isinstance(rep, dict):
+                r["replication"] = {**(r.get("replication") or {}), **{k: v for k, v in rep.items() if isinstance(v, str) and v.strip()}}
+        out.append(r)
+    return out
+
+
 WHOLE_PROMPT = """你是短视频拆解专家。完整观看并**仔细收听**这条视频，拆解它的结构、文案、声音与整体制作方式。
 声音要拆到可以复刻：旁白是真人还是 TTS、音色；背景音乐的风格/情绪/节奏/是否 AI 生成或知名歌曲；
 判断音乐来源时结合视频形式：AI 音乐 MV（整片一首歌、歌词唱的就是画面内容）大概率是 AI 生成的歌；普通视频的垫底配乐大概率是现成曲库；
@@ -261,7 +291,7 @@ WHOLE_PROMPT = """你是短视频拆解专家。完整观看并**仔细收听**�
 只返回 JSON：
 {{
   "summary": "一句话概括",
-  "format": "口播|剧情|商品展示|知识讲解|MV|混剪|其他",
+  "format": "口播|剧情|商品展示|知识讲解|MV|混剪|影视解说|其他",
   "hook": "开头 3 秒如何抓人",
   "segments": [{{"start": 0.0, "end": 3.0, "beat": "这一段在叙事上的作用", "copy": "这一段的旁白/字幕文案", "audio": "人声/音乐/音效"}}],
   "narration": {{"type": "tts|human|none|mixed", "voice": "性别/年龄感/音色", "style": "语速、情绪、口癖", "language": "zh|en|...",

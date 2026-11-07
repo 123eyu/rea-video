@@ -33,6 +33,7 @@ signals:
   static_hold:         {detected_by: [analyze.shot_boundary], desc: 静帧定格（图片或卡片停留）}
   anim_2d:             {detected_by: [analyze.video_understanding], desc: 2D 动画（手绘逐帧、Live2D、AE/Spine 角色动画），工具测不出，靠看图}
   stop_motion:         {detected_by: [analyze.video_understanding], desc: 定格动画（实物/黏土/纸偶逐帧拍摄），工具测不出，靠看图}
+  film_footage:        {detected_by: [analyze.video_understanding], desc: 剪进来的电影/电视剧/短剧画面（影视解说、混剪、名场面），像素上和实拍、AI 分不开，工具只给线索（黑边版式、24/25fps 源），靠看图}
   ai_edited_footage:   {detected_by: [analyze.video_understanding], desc: 实拍画面被 AI 二次加工（换脸、对口型、风格化、换装、换背景）}
 
 # ---------------------------------------------------------------- 拆分
@@ -212,6 +213,14 @@ rules:
     prefer: [kling-3.0, seedance-2.5, vidu-q3]
     verify: [perceptual_similarity]
     why: 首选真的拍：手机固定 + 定格 App 每秒 12 张；AI 生成只能近似定格的顿挫感，提示词写明 stop-motion、12fps
+
+  - id: R21-film-footage
+    layer: base
+    when: [film_footage]
+    route: [render.compose]
+    prefer: [ffmpeg]
+    verify: [perceptual_similarity]
+    why: 画面来自已有影视作品，复刻是找到原片对应片段再剪（版权属于片方，商用要授权）；不用原片时按同样景别、机位、打光自己拍，或用 AI 近似（R07）
 
   - id: R16-dialogue-coupled
     layer: base

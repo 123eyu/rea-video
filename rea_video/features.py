@@ -229,6 +229,96 @@ def _periodicity(flags: list[bool]) -> dict:
     return {"period": period, "regularity": regularity}
 
 
+def _picture_run(lit: np.ndarray, gap: int) -> tuple[int, int] | None:
+    """Longest run of picture lines (rows or columns), bridging gaps of up to `gap` dark lines."""
+    idx = np.flatnonzero(lit)
+    if not len(idx):
+        return None
+    best, start, prev = (0, 0), idx[0], idx[0]
+    for i in list(idx[1:]) + [None]:
+        if i is not None and i - prev <= gap + 1:
+            prev = i
+            continue
+        if prev - start > best[1] - best[0]:
+            best = (start, prev)
+        if i is not None:
+            start = prev = i
+    return int(best[0]), int(best[1]) + 1
+
+
+def picture_box(frames: list[np.ndarray]) -> dict | None:
+    """A picture sitting inside black bars that stay put for the whole shot: a film or TV clip letterboxed into a
+    vertical frame (the usual 影视解说 layout, a title in the top bar and subtitles under the picture), or a
+    widescreen film inside a 16:9 frame. Returns the box (0-1 x, y, w, h) and its aspect ratio, or None.
+    A picture line is lit across most of its width in at least one sampled frame (a dark scene lights up somewhere
+    in the shot); a bar line is dark in every frame apart from text, which lights only a small part of a line."""
+    if len(frames) < 2:
+        return None
+    lit = np.stack([cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) > 24 for f in frames])
+    h, w = lit.shape[1:]
+    # rows over the full width, then columns inside those rows, then rows again inside the columns
+    # (a picture filling a third of the height lights only a third of each column)
+    y0, y1, x0, x1 = 0, h, 0, w
+    for _ in range(2):
+        rr = _picture_run(lit[:, :, x0:x1].mean(axis=2).max(axis=0) > 0.6, max(1, h // 50))
+        if not rr:
+            return None
+        y0, y1 = rr
+        cr = _picture_run(lit[:, y0:y1, :].mean(axis=1).max(axis=0) > 0.6, max(1, w // 50))
+        if not cr:
+            return None
+        x0, x1 = cr
+    rows = lit[:, :, x0:x1].mean(axis=2).max(axis=0)
+    cols = lit[:, y0:y1, :].mean(axis=1).max(axis=0)
+    outside_r = np.concatenate([rows[:y0], rows[y1:]])
+    outside_c = np.concatenate([cols[:x0], cols[x1:]])
+    bars_r = (y0 + h - y1) / h
+    bars_c = (x0 + w - x1) / w
+    # bars must be real: wide enough, dark apart from text, and the picture edge sharp (a lit line right at the edge)
+    ok_r = bars_r >= 0.06 and (not len(outside_r) or np.median(outside_r) < 0.1) and min(rows[y0], rows[y1 - 1]) > 0.8
+    ok_c = bars_c >= 0.06 and (not len(outside_c) or np.median(outside_c) < 0.1) and min(cols[x0], cols[x1 - 1]) > 0.8
+    if not (ok_r or ok_c):
+        return None
+    if not ok_r:
+        y0, y1 = 0, h
+    if not ok_c:
+        x0, x1 = 0, w
+    if (y1 - y0) < 0.2 * h or (x1 - x0) < 0.2 * w:
+        return None
+    return {"box": [x0 / w, y0 / h, (x1 - x0) / w, (y1 - y0) / h], "aspect": (x1 - x0) / max(1, y1 - y0),
+            "bar_share": 1.0 - (x1 - x0) * (y1 - y0) / float(h * w)}
+
+
+def crop_box(frame: np.ndarray, box) -> np.ndarray:
+    """The part of a frame inside a 0-1 (x, y, w, h) box."""
+    H, W = frame.shape[:2]
+    x, y, w, h = box
+    return frame[int(y * H):int((y + h) * H), int(x * W):int((x + w) * W)]
+
+
+def photo_letterbox(frames: list[np.ndarray]) -> dict | None:
+    """picture_box(), kept only when the boxed picture is film / TV shaped (at least 4:3 wide) and looks photographic
+    (palette >= 100 colours). A rendered card on a black ground, or a portrait phone recording pasted on black
+    (a screen-capture layout, where the black surround is part of the evidence), keep their whole-frame statistics."""
+    pbox = picture_box(frames)
+    if not pbox or pbox["aspect"] < 1.3:
+        return None
+    pal = [spatial_features(c)["palette95"] for c in (crop_box(f, pbox["box"]) for f in frames)
+           if c.shape[0] >= 16 and c.shape[1] >= 16]
+    return pbox if pal and np.median(pal) >= 100 else None
+
+
+def intersect_box(a: tuple | list | None, b: tuple | list | None) -> tuple[float, float, float, float] | None:
+    """Intersection of two 0-1 (x, y, w, h) regions; either may be None (= the whole frame)."""
+    if not a or not b:
+        return tuple(a or b) if (a or b) else None
+    x0, y0 = max(a[0], b[0]), max(a[1], b[1])
+    x1, y1 = min(a[0] + a[2], b[0] + b[2]), min(a[1] + a[3], b[1] + b[3])
+    if x1 - x0 < 0.1 or y1 - y0 < 0.1:
+        return tuple(b)
+    return x0, y0, x1 - x0, y1 - y0
+
+
 def shot_features(samples: ShotSamples, fps: float) -> dict:
     sp = [spatial_features(f) for f in samples.frames] or [spatial_features(np.zeros((32, 32, 3), np.uint8))]
     agg = {k: float(np.median([s[k] for s in sp])) for k in sp[0]}
@@ -238,6 +328,8 @@ def shot_features(samples: ShotSamples, fps: float) -> dict:
     dup = mad < 0.15
     moving_pairs = mad > 0.6
     per = _periodicity(dup.tolist())
+    if samples.pair_mad:
+        agg["dup_count"] = int(dup.sum())  # absent for a single-frame shot: nothing to count
     agg.update({
         "pair_mad_median": float(np.median(mad)),
         "pair_mad_p90": float(np.percentile(mad, 90)),

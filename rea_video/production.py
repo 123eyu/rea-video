@@ -176,7 +176,7 @@ def _runs(shots: list[dict], same_scene, labels: tuple) -> list[list[dict]]:
                 runs.append(cur)
             cur, gap = [], False
             continue
-        joinable = cur and same_scene(cur[-1], r) and (gap or r.get("transition_in") in ("cut", "flash"))
+        joinable = cur and same_scene(cur[-1], r) and (gap or r.get("transition_in") in ("cut", "jump", "flash"))
         if cur and not joinable:
             runs.append(cur)
             cur = []
@@ -265,7 +265,7 @@ def _unit(seg: list[dict], k: int, lim: dict, model: dict | None, style: str, ca
                      + T("：参考动作、运镜和剪辑节奏（只作参考，不复制画面）",
                          ": reference for action, camera movement and cutting rhythm (reference only, do not copy the picture)"), "user": False})
     cont = None
-    if prev_unit and same_scene_prev and seg[0].get("transition_in") in ("cut", "flash") and abs(prev_unit["ranges"][-1][1] - t0) < 1e-3:
+    if prev_unit and same_scene_prev and seg[0].get("transition_in") in ("cut", "jump", "flash") and abs(prev_unit["ranges"][-1][1] - t0) < 1e-3:
         cont = T("首帧用 {p} 的尾帧，接上动作", "first frame = last frame of {p}, continue the action", p=prev_unit["id"])
     elif lim["first_frame"]:
         cont = T("首帧：参照原片第 {i} 镜首帧（{f}）的构图出图", "first frame: generate an image matching the composition of source shot {i}'s first frame ({f})",
@@ -436,10 +436,25 @@ def production_plan(b: dict, out: Path, engine: str = "seedance2.0") -> dict:
     plan["local"] = [{"shot": r["index"], "label_zh": r["base"]["label_zh"], "duration": r["duration"]}
                      for r in shots if r["base"]["label"] in LOCAL_LABELS]
     plan["avatar"] = [r["index"] for r in shots if r["base"]["label"] == "avatar"]
+    plan["footage"] = footage_runs(shots)
     plan["_labels"] = {r["index"]: r["base"]["label"] for r in shots}
     plan["summary"] = summary_line(plan, b)
     del plan["_labels"]
     return plan
+
+
+def footage_runs(shots: list[dict]) -> list[dict]:
+    """Film / TV clips in a row: the stretches to find in the source."""
+    runs, cur = [], []
+    for r in shots + [None]:
+        if r is not None and r["base"]["label"] == "film_footage":
+            cur.append(r)
+            continue
+        if cur:
+            runs.append({"shots": [x["index"] for x in cur], "start": cur[0]["start"], "end": cur[-1]["end"],
+                         "duration": round(cur[-1]["end"] - cur[0]["start"], 3)})
+            cur = []
+    return runs
 
 
 def _s(n: int) -> str:
@@ -478,6 +493,9 @@ def summary_line(plan: dict, b: dict) -> str:
     if plan["local"]:
         n = len(plan["local"])
         bits.append(T("静图推拉/静帧 {n} 镜 → 本地重建", "still-image move / static frame {n} shot{s} → rebuilt locally", n=n, s=_s(n)))
+    if plan.get("footage"):
+        n = sum(len(f["shots"]) for f in plan["footage"])
+        bits.append(T("影视片段 {n} 镜 → 找原片剪辑", "film / TV footage {n} shot{s} → cut from the source", n=n, s=_s(n)))
     if plan["avatar"]:
         n = len(plan["avatar"])
         bits.append(T("数字人 {n} 镜 → TTS + 数字人驱动", "digital avatar {n} shot{s} → TTS + avatar driver", n=n, s=_s(n)))
@@ -596,4 +614,11 @@ def report_md(plan: dict) -> list[str]:
     if plan["local"]:
         L += ["", T("### 本地重建", "### Local rebuild"), "", "- " + semi().join(f"#{x['shot']} {x['label_zh']} {x['duration']:.1f}s" for x in plan["local"])
               + T("：一张图 + 测得的缩放/平移参数，ffmpeg 直接出", ": one image + the measured zoom / pan parameters, rendered straight from ffmpeg")]
+    if plan.get("footage"):
+        L += ["", T("### 影视原片", "### Film / TV source"), "",
+              T("- 这些镜头剪自已有的影视作品：找到原片对应片段再剪，版权属于片方，商用要授权；不用原片时按同样景别、机位和打光自己拍，或用 AI 做近似画面",
+                "- These shots are cut from existing films or series: find the same clips in the source and cut them; rights belong to the studio and commercial use needs a licence. "
+                "Without the source, shoot them yourself with the same shot size, camera setup and lighting, or approximate them with AI"), ""]
+        for f in plan["footage"]:
+            L.append(f"- {f['start']:.1f}–{f['end']:.1f}s " + T("{n} 镜", "{n} shot{s}", n=len(f["shots"]), s=_s(len(f["shots"]))))
     return L

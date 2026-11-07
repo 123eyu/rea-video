@@ -12,6 +12,7 @@ from .classify import LABEL_ZH, LABELS, top
 from . import aspects
 from .vlm import SHOT_PROMPT, shot_hints
 
+SHOOT_LIKE = ("live_action", "avatar", "stop_motion", "film_footage")  # shots where "how was it shot / lit" applies
 AGENT_WEIGHT = 0.85  # agent answers are softened toward uniform before fusion
 IMAGE_SOURCES = ("ai_image", "photo", "graphic", "screenshot", "unknown")
 EDIT_KINDS = ("face_swap", "lip_sync", "restyle", "outfit_swap", "bg_replace", "object_edit", "beautify")
@@ -27,12 +28,13 @@ INSTRUCTIONS = f"""你是这次的 VLM：逐个镜头看图，判断「底层画
 把你的判断并入结论（会重写 breakdown.json、report.md、report.html）。
 
 怎么看：
-1. 先看 storyboard.jpg 建立整体印象；每个镜头看 images 里的 sheet（首/中/尾联系表），需要时运行 zoom_cmd 抽帧细看。
+1. 先看 storyboard.jpg 建立整体印象；每个镜头看 images 里的 sheet（首/中/尾联系表，一张就够，不用另开首尾帧）。
+   要细看时运行顶层的 zoom_cmd，把 {{start}} {{end}} {{id}} 换成该镜头的值。
 2. priority=high 的镜头（低置信、次选接近、转码后实拍/AI 待确认）一定要看；其余镜头也尽量都答。
-3. 只依据画面证据，独立判断（这里不给 VLM 的答案，它会在融合时单独计入）。tool 一栏是确定性取证的结果，可能有误，但帧率类证据（24→30 重复帧）和 AIGC 标识可靠，
+3. common_evidence 是整片共有的工具证据（帧率、转码），每镜 tool.evidence 里不再重复。只依据画面证据，独立判断（这里不给 VLM 的答案，它会在融合时单独计入）。tool 一栏是确定性取证的结果，可能有误，但帧率类证据（24→30 重复帧）和 AIGC 标识可靠，
    和画面印象冲突时不要轻易推翻（见 SKILL.md「平台转码视频」）。
 4. 看不出就把概率分散开，例如 ai_video 0.55 / live_action 0.45，并在 evidence 写清缺什么证据。
-5. 没看过的镜头不要填（保持 label_probs 全 0），apply-review 会跳过它。
+5. 没看过的镜头不要填（label_probs 保持 {{}}），apply-review 会跳过它。
 
 {LABEL_GUIDE}
 
@@ -50,6 +52,7 @@ video_prompt（复刻该镜头的中文视频提示词：写清动作过程和�
 
 实拍/写实镜头再填 aspects（怎么拍、怎么打光；纯图形/界面画面不填），像素测不出的部分靠你看：
 {ASPECT_GUIDE}
+答案模板只给可能是实拍的镜头预留了 aspects；别的镜头你判成实拍时，照顶层 shot_aspects_template 的结构加上。
 工具已经测了景别、主体光比、主光左右/上下、软硬、色温、背景虚化（见每镜 aspects），你主要补：机位角度、
 拍摄方式（自拍/支架）、主光是什么光源、眼神光、轮廓光/背景灯、画面里可见的光源；和测量冲突时写明依据。
 最后在答案顶层的 aspects 里写整片：机位/场景、推测设备、整体布光、剪辑手法、视频形式。
@@ -70,6 +73,17 @@ def _tiles_cmd(video, t0: float, t1: float, every: float, out: str) -> str:
     """Shell-ready `rea-video tiles` command (paths quoted: file names often have spaces)."""
     return (f"rea-video tiles {shlex.quote(str(video))} --start {t0:.2f} --end {t1:.2f} --every {every:g} "
             f"-o {shlex.quote(out)}")
+
+def _strip_glosses(d):
+    """Measured aspect values carry a reader's gloss in brackets ("正面（光从镜头方向来…）"); the agent has the
+    field guide in the instructions, so keep the value only."""
+    if isinstance(d, dict):  # also drop empty values and the code twin of a readable field (support / support_zh)
+        return {k: _strip_glosses(v) for k, v in d.items()
+                if v is not None and f"{k}_zh" not in d and f"{k}_name" not in d}
+    if isinstance(d, str):
+        return re.sub(r"（[^（）]*）|\s\([^()]*\)", "", d).strip() or d
+    return d
+
 
 def _priority(rec: dict, ctx: dict) -> tuple[str, list[str]]:
     det = (rec.get("deterministic") or {}).get("probs") or {}
@@ -107,17 +121,19 @@ def build_tasks(breakdown: dict, out_dir: str) -> tuple[dict, dict]:
         past = hint_for(dl, pats)
         if past:
             prio, why = "high", why + [past]
+        shoot_like = any(l in SHOOT_LIKE for l, _ in ranked[:2])
         shots.append({
             "id": rec["id"], "index": rec["index"], "start": rec["start"], "end": rec["end"], "duration": rec["duration"],
             "priority": prio, "why": why,
             "tool": {"label": dl, "label_zh": LABEL_ZH[dl], "confidence": round(dp, 3),
                      "second": [alt[0][0], round(alt[0][1], 3)] if alt else None,
                      "evidence": rec["deterministic"]["evidence"][:6]},
-            "hints": shot_hints(rec["features"], rec["deterministic"]["facts"], dl, dp),
-            "aspects": {k: v["result"] for k, v in (rec.get("aspects") or {}).items() if v.get("result")},
-            "images": {"sheet": rec["assets"]["sheet"], "first": rec["assets"]["first_frame"], "last": rec["assets"]["last_frame"],
-                       **({"strip": rec["assets"]["strip"]} if rec["assets"].get("strip") else {})},
-            "zoom_cmd": _tiles_cmd(video, rec["start"], rec["end"], 0.2, f"{out_dir}/check_{rec['id']}.jpg"),
+            # the tool's top label is already in "tool"; drop it from the raw hints
+            "hints": shot_hints(rec["features"], rec["deterministic"]["facts"], dl, dp).split("; 确定性初判=")[0],
+            **({"aspects": {k: v["result"] for k, v in (rec.get("aspects") or {}).items() if v.get("result")}} if shoot_like else {}),
+            # the sheet already holds first / middle / last; separate first / last frames would triple the image tokens
+            "images": {"sheet": rec["assets"]["sheet"], **({"strip": rec["assets"]["strip"]} if rec["assets"].get("strip") else {})},
+            "_shoot_like": shoot_like,
         })
     pack = breakdown.get("packaging") or {}
     pk_tasks, pk_answers = None, None
@@ -132,17 +148,31 @@ def build_tasks(breakdown: dict, out_dir: str) -> tuple[dict, dict]:
                              for c in txt[:80]]}
         pk_answers = {"stickers": [{"id": st["id"], "is_overlay": None, "what": ""} for st in sts],
                       "text": [{"id": c["id"], "kind": ""} for c in txt[:80]], "missed": []}
+    shoot = {s["id"]: s.pop("_shoot_like") for s in shots}
+    # whole-video evidence (frame rate, transcode) repeats on most shots: state it once at the top
+    from collections import Counter
+
+    seen_in = Counter(e for s in shots for e in set(s["tool"]["evidence"]))
+    common = [e for e, n in seen_in.items() if len(shots) >= 4 and n > len(shots) / 2]
+    for s in shots:
+        s["tool"]["evidence"] = [e for e in s["tool"]["evidence"] if e not in common]
+        if "aspects" in s:
+            s["aspects"] = _strip_glosses(s["aspects"])
     tasks = {"instructions": INSTRUCTIONS, "video": video, "storyboard": "storyboard.jpg",
-             "video_context": {k: ctx.get(k) for k in ("transcoded", "platform", "native30") if k in ctx},
+             "zoom_cmd": _tiles_cmd(video, 0, 0, 0.2, f"{out_dir}/check_ID.jpg")
+             .replace("--start 0.00 --end 0.00", "--start {start} --end {end}").replace("check_ID.jpg", "check_{id}.jpg"),
+             "shot_aspects_template": aspects.review_template(),
+             "video_context": {k: ctx.get(k) for k in ("transcoded", "platform", "native30", "film_hint_share") if k in ctx},
              "aigc": (breakdown.get("provenance") or {}).get("aigc"),
+             **({"common_evidence": common} if common else {}),
              "shots": shots}
     if pk_tasks:
         tasks["packaging"] = pk_tasks
     answers = {"by": "", "shots": [{"id": s["id"], "time": f"{s['start']:.2f}-{s['end']:.2f}",
-                                     "label_probs": {k: 0 for k in LABELS}, "image_source": "unknown",
+                                     "label_probs": {}, "image_source": "unknown",
                                      "evidence": [], "description": "", "embedded_assets": [], "ai_edits": [],
                                      "replication": {"image_prompt": "", "video_prompt": "", "video_prompt_en": ""},
-                                     "aspects": aspects.review_template()} for s in shots],
+                                     **({"aspects": aspects.review_template()} if shoot[s["id"]] else {})} for s in shots],
                "aspects": aspects.review_template(video=True),
                "cast": {"style": "", "characters": [{"id": "A", "name": "", "kind": "", "look": "", "role": "", "voice": "", "shots": []}],
                         "scenes": [{"id": "S1", "where": "", "when": "", "look": "", "shots": []}], "props": [{"name": "", "note": "", "shots": []}]}}
@@ -208,9 +238,12 @@ def apply_answers(breakdown: dict, answers: dict, by: str | None = None) -> dict
     """Store answers on the shots (rec["review"]) and return a change log. Call finalize() afterwards."""
     by = by or answers.get("by") or "agent"
     recs = {r["id"]: r for r in breakdown["shots"]}
-    applied, problems, changes = [], [], []
+    applied, problems, changes, unanswered = [], [], [], []
     for ans in answers.get("shots") or []:
         sid = ans.get("id")
+        if sid in recs and not any((ans.get("label_probs") or {}).values()):
+            unanswered.append(sid)  # left blank on purpose: listed once, not as a problem per shot
+            continue
         if sid not in recs:
             problems.append(f"{sid}: 没有这个镜头")
             continue
@@ -244,4 +277,4 @@ def apply_answers(breakdown: dict, answers: dict, by: str | None = None) -> dict
         breakdown["review_cast"] = cast
     breakdown.setdefault("analysis", {})["review"] = {"by": by, "shots": len(applied), "of": len(breakdown["shots"]),
                                                        "time": time.strftime("%Y-%m-%d %H:%M"), "problems": problems}
-    return {"applied": applied, "problems": problems, "before": dict(changes)}
+    return {"applied": applied, "problems": problems, "unanswered": unanswered, "before": dict(changes)}

@@ -120,7 +120,7 @@ Alles echtes Material: ein Handy-Rig von oben, ein Teppich, eine Kameraposition,
 
 ## Remakes
 
-Nachdem rea-video ein Video zerlegt hat, erzeugt das Remake-Rezept in [cheap-claude-video](https://github.com/JuneYaooo/cheap-claude-video) eine neue Version: Kamera, Bewegung, Tempo und Übergänge folgen dem Original, nur die Elemente, die du auswählst, werden ausgetauscht.
+Nachdem rea-video ein Video zerlegt hat, erzeugt das Remake-Rezept in [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) eine neue Version: Kamera, Bewegung, Tempo und Übergänge folgen dem Original, nur die Elemente, die du auswählst, werden ausgetauscht.
 Diese Ergebnisse wurden mit einem selbst gehosteten MiniMax H3 erzeugt: Der Original-Shot dient als Bewegungsreferenz, und Keyframes mit den ausgetauschten Elementen (gpt-image-2) bestimmen den Look.
 Unten sind drei Remakes, die OiiOii in seinen WeChat-Artikeln gezeigt hat. Für jedes haben wir zwei Versionen gemacht: denselben Austausch wie OiiOii und eine, die zusätzlich Hauptfigur, Umgebung und Requisiten austauscht.
 Jedes GIF spielt vier Versionen synchron ab: Original, OiiOii-Remake, unser Remake, Version mit ausgetauschten Elementen.
@@ -196,7 +196,7 @@ Nein. Der reine Tool-Modus läuft offline, ist kostenlos und bei Originaldateien
 <details>
 <summary>Kann es das ganze Video automatisch nachbauen?</summary>
 
-Teilweise. Mit installiertem [capsule-cinema](https://github.com/JuneYaooo/cheap-claude-video) werden KI-Shots automatisch generiert und auf die Original-Timeline zurückgesetzt. Realfilm-Shots drehst du nach dem Drehplan; Code-Shots schreibt der Agent als Remotion-Projekt. Siehe [docs/replicate.md](../docs/replicate.md).
+Teilweise. Mit installiertem [capsule-cinema](https://github.com/JuneYaooo/capsule-cinema) werden KI-Shots automatisch generiert und auf die Original-Timeline zurückgesetzt. Realfilm-Shots drehst du nach dem Drehplan; Code-Shots schreibt der Agent als Remotion-Projekt. Siehe [docs/replicate.md](../docs/replicate.md).
 
 </details>
 

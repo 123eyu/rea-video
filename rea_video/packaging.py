@@ -1243,7 +1243,8 @@ def analyze(path: str | Path, info: VideoInfo, cuts: list[float], out_dir: Path 
     kinds: dict[str, int] = {}
     for c in cues:
         kinds[c["kind"]] = kinds.get(c["kind"], 0) + 1
-    return {"text_cues": cues, "stickers": stickers, "ocr": {"step_s": round(step, 3), "frames": int(round(info.duration / step)) if step else 0,
+    # the raw OCR hits go back to the caller for the per-shot text (popped before the breakdown is written)
+    return {"_ocr_items": items, "text_cues": cues, "stickers": stickers, "ocr": {"step_s": round(step, 3), "frames": int(round(info.duration / step)) if step else 0,
                                                             "dense_step_s": round(dstep, 3)},
             "counts": {"text": kinds, "stickers": len(stickers)}}
 

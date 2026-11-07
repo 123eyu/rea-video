@@ -54,9 +54,32 @@ def render_still_motion(image: Path, out: Path, duration: float, size: tuple[int
     return out
 
 
+MAX_SPEEDUP = 3.0   # a generated clip is retimed to the original shot length, up to this much faster
+MAX_SLOWDOWN = 1.25  # and up to this much slower; past that the remainder is trimmed / held
+
+
+def fit_speed(clip_s: float, duration: float) -> float:
+    """Playback speed that fits a generated clip into the original shot. Models have a minimum length
+    (often 4-5 s), so a 1.2 s shot comes back as 4 s of the same action: playing only its first 1.2 s
+    cuts the action off and slows the edit, so the whole clip is sped up instead (within limits)."""
+    if clip_s <= 0 or duration <= 0:
+        return 1.0
+    return max(1 / MAX_SLOWDOWN, min(MAX_SPEEDUP, clip_s / duration))
+
+
+def _clip_seconds(src: Path) -> float:
+    try:
+        r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(src)],
+                           capture_output=True, text=True, check=True)
+        return float(r.stdout.strip() or 0)
+    except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
+        return 0.0
+
+
 def _fit_clip(src: Path, out: Path, duration: float, size: tuple[int, int], fps: float) -> Path:
     w, h = size
-    vf = (f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={fps},"
+    speed = fit_speed(_clip_seconds(src), duration)
+    vf = (f"setpts=PTS/{speed:.4f},scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={fps},"
           f"tpad=stop_mode=clone:stop_duration={duration:.3f},trim=duration={duration:.3f},setpts=PTS-STARTPTS")
     _ff(["-i", str(src), "-an", "-vf", vf, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", str(out)])
     return out

@@ -1,4 +1,4 @@
-"""Bridge to capsule-cinema (https://github.com/JuneYaooo/cheap-claude-video).
+"""Bridge to capsule-cinema (https://github.com/JuneYaooo/capsule-cinema).
 
 1. export_capsule_analysis(): converts a rea-video breakdown into the analyzer JSON that
    capsule-cinema's video->capsule pipeline expects (scripts/analyze_video_to_capsule.py),

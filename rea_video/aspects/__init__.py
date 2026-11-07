@@ -140,9 +140,15 @@ def check(gt: dict, b: dict) -> dict[str, bool]:
     return out
 
 
-def shot_text(r: dict) -> str:
+def shot_text(r: dict, brief: bool = False) -> str:
+    """brief=True: shot size, camera, lighting setup only (the per-shot line of `rea-video summary`;
+    key direction / ratio / softness are in the whole-video lines and in report.md)."""
     asp = r.get("aspects") or {}
     fr, cam, li = ((asp.get(k) or {}).get("result") or {} for k in ("framing", "camera", "lighting"))
+    if brief:
+        support = cam.get("support_zh") or ""
+        return semi().join(p for p in (fr.get("shot_size"), fr.get("camera_angle"), support.split("（")[0].split(" (")[0],
+                                         li.get("setup_name")) if p)
     parts = [fr.get("shot_size"), fr.get("camera_angle"), cam.get("support_zh"),
              li.get("setup_name"), li.get("key_direction") and T("主光{k}", "key light {k}", k=li["key_direction"]),
              li.get("ratio") and T("光比{r}", "lighting ratio {r}", r=li["ratio"]), li.get("quality")]

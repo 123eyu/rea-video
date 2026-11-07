@@ -24,10 +24,12 @@ KIND_ZH = LangDict({
     "real_footage": "实拍视频素材", "photo_or_image": "照片/图片素材", "screenshot": "界面截图",
     "screen_recording": "录屏素材", "video_clip": "嵌入视频片段", "ai_generated": "AI 生成", "rendered": "制作方渲染",
     "photo": "真实照片", "ai_image": "AI 生成图", "graphic": "设计图形", "logo": "Logo/品牌标识", "product_photo": "商品实拍图",
+    "film_clip": "影视原片片段",
 }, en={
     "real_footage": "live footage", "photo_or_image": "photo / image", "screenshot": "UI screenshot",
     "screen_recording": "screen recording", "video_clip": "embedded video clip", "ai_generated": "AI-generated", "rendered": "rendered by the creator",
     "photo": "photo", "ai_image": "AI-generated image", "graphic": "designed graphic", "logo": "logo / brand mark", "product_photo": "product photo",
+    "film_clip": "clip from a film / series",
 })
 REF_ZH = LangDict({"product_photo": "商品参考图", "logo": "Logo/品牌参考", "photo": "人物/场景参考图", "real_footage": "动作/场景参考视频",
                    "screenshot": "界面参考图", "screen_recording": "界面参考录屏", "video_clip": "参考视频", "photo_or_image": "参考图"},
@@ -38,10 +40,11 @@ REF_ZH = LangDict({"product_photo": "商品参考图", "logo": "Logo/品牌参�
 GENERATED_BASES = ("ai_video", "avatar")
 # a 3D render can still carry a pasted screenshot or recording; products / logos / people in it are modelled
 RENDER_REF_KINDS = ("product_photo", "logo", "photo", "real_footage", "ai_image")
-ORIGIN_ZH = LangDict({"real": "用户真实素材", "ai_generated": "AI 生成", "rendered": "制作方渲染", "mixed": "混合（含真实素材）", "unknown": "待确认"},
+ORIGIN_ZH = LangDict({"real": "用户真实素材", "ai_generated": "AI 生成", "rendered": "制作方渲染", "mixed": "混合（含真实素材）",
+                      "third_party": "影视原片（版权属于片方）", "unknown": "待确认"},
                      en={"real": "the user's real material", "ai_generated": "AI-generated", "rendered": "rendered by the creator",
-                         "mixed": "mixed (includes real material)", "unknown": "to confirm"})
-REAL_KINDS = {"real_footage", "photo_or_image", "screenshot", "screen_recording", "video_clip", "photo", "logo", "product_photo"}
+                         "mixed": "mixed (includes real material)", "third_party": "film / TV source (rights belong to the studio)", "unknown": "to confirm"})
+REAL_KINDS = {"real_footage", "photo_or_image", "screenshot", "screen_recording", "video_clip", "photo", "logo", "product_photo", "film_clip"}
 
 
 def _entropy(gray_block: np.ndarray) -> float:
@@ -209,6 +212,9 @@ def material_summary(label: str, image_source: str | None, embedded: list[dict],
     items: list[dict] = []
     if label == "live_action":
         items.append({"kind": "real_footage", "region": "full", "real_material": True})
+    elif label == "film_footage":
+        # the original clip is the material: a remake needs the source file (and the right to use it)
+        items.append({"kind": "film_clip", "region": "full", "real_material": True})
     elif label == "screen_capture":
         items.append({"kind": "screen_recording" if moving and image_source != "screenshot" else "screenshot", "region": "full", "real_material": True})
     elif label in ("static_hold", "still_motion"):
@@ -229,11 +235,11 @@ def material_summary(label: str, image_source: str | None, embedded: list[dict],
             continue
         kind = e.get("kind", "photo_or_image")
         desc = e.get("description", "")
-        if label in GENERATED_BASES or (label == "cg_3d" and kind in RENDER_REF_KINDS) or label == "live_action":
+        if label in GENERATED_BASES or (label == "cg_3d" and kind in RENDER_REF_KINDS) or label in ("live_action", "film_footage"):
             # generated / modelled / filmed pixels: the product or person is something to supply as a reference
             # (for live action the whole frame is already real footage)
             # camera footage "in" a generated or filmed picture is not something a remake can be given
-            if kind not in ("ai_image", "real_footage", "video_clip") and (label != "live_action" or kind in ("product_photo", "logo")):
+            if kind not in ("ai_image", "real_footage", "video_clip") and (label not in ("live_action", "film_footage") or kind in ("product_photo", "logo")):
                 refs.append({"kind": kind, "kind_zh": REF_ZH.get(kind, T("参考素材", "reference material")), "description": desc, "source": "vlm"})
             continue
         if kind == "real_footage":
@@ -248,6 +254,8 @@ def material_summary(label: str, image_source: str | None, embedded: list[dict],
         base = "rendered"
     elif label in ("live_action", "screen_capture"):
         base = "real"
+    elif label == "film_footage":
+        base = "third_party"
     elif image_source == "ai_image":
         base = "ai_generated"
     elif image_source == "graphic":
